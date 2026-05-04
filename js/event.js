@@ -16,19 +16,20 @@
     return out;
   }
 
+  function formatDisplayDate(iso, opts) {
+    const base = opts || { weekday: 'short', month: 'short', day: 'numeric' };
+    return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, Object.assign({}, base, { timeZone: 'UTC' }));
+  }
+
   function formatDateLong(iso) {
-    return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric'
-    });
+    return formatDisplayDate(iso);
   }
 
   function formatDateRange(startISO, endISO) {
     const opts = { month: 'short', day: 'numeric' };
-    const start = new Date(startISO + 'T00:00:00Z').toLocaleDateString(undefined, opts);
+    const start = formatDisplayDate(startISO, opts);
     if (startISO === endISO) return start;
-    const end = new Date(endISO + 'T00:00:00Z').toLocaleDateString(undefined, opts);
+    const end = formatDisplayDate(endISO, opts);
     return start + ' – ' + end;
   }
 
@@ -47,8 +48,12 @@
 
   function setStatus(msg, type) {
     const el = $('submit-status');
-    el.className = type === 'error' ? 'error' : (type === 'ok' ? 'notice' : '');
+    el.classList.remove('banner-error', 'banner-success', 'banner-warning');
     el.textContent = msg || '';
+    if (!msg) return;
+    if (type === 'error') el.classList.add('banner-error');
+    else if (type === 'ok') el.classList.add('banner-success');
+    else el.classList.add('banner-warning');
   }
 
   function getEventIdFromUrl() {

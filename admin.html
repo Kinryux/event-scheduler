@@ -3,83 +3,91 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Admin — Event Availability</title>
+    <title>Admin — Group Events</title>
     <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
-    <div class="container">
-      <header class="site-header">
-        <h1><a href="index.html">Event Availability</a> — Admin</h1>
-      </header>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="brand" href="index.html">Group Events</a>
+        <nav class="site-nav">
+          <a href="index.html">Events</a>
+          <a href="admin.html" class="active" aria-current="page">Admin</a>
+        </nav>
+      </div>
+    </header>
 
-      <main>
-        <div id="admin-error" class="error"></div>
+    <main class="container">
+      <div id="admin-error" class="banner banner-error"></div>
 
-        <section id="login-section">
-          <h2>Admin login</h2>
-          <p class="meta">
-            This page is gated by a shared passphrase. Anyone with the passphrase
-            can create or delete events. Don't reuse a sensitive password.
-          </p>
-          <form id="login-form">
-            <label>
-              Passphrase
-              <input type="password" id="admin-pass" required />
-            </label>
-            <div class="row">
-              <button type="submit" class="primary">Unlock</button>
-            </div>
-          </form>
-        </section>
+      <section id="login-section">
+        <h1>Admin login</h1>
+        <p class="muted small caveat">
+          Shared passphrase — anyone with it can create or delete events.
+          Don't reuse a sensitive password.
+        </p>
+        <form id="login-form">
+          <label>
+            <span class="label-text">Passphrase</span>
+            <input type="password" id="admin-pass" autocomplete="current-password" required />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="primary">Unlock</button>
+          </div>
+        </form>
+      </section>
 
-        <section id="create-section" class="section hidden">
+      <section id="create-section" class="section hidden">
+        <div class="section-head">
           <h2>Create event</h2>
-          <form id="create-form">
+          <button id="logout-button" class="ghost" type="button">Sign out</button>
+        </div>
+        <div id="create-status" class="banner"></div>
+        <form id="create-form">
+          <label>
+            <span class="label-text">Title</span>
+            <input type="text" id="create-title" required />
+          </label>
+          <label>
+            <span class="label-text">Description</span>
+            <textarea id="create-description" rows="3"></textarea>
+          </label>
+          <div class="grid-two">
             <label>
-              Title
-              <input type="text" id="create-title" required />
-            </label>
-            <label>
-              Description
-              <textarea id="create-description"></textarea>
-            </label>
-            <label>
-              Start date
+              <span class="label-text">Start date</span>
               <input type="date" id="create-start" required />
             </label>
             <label>
-              End date
+              <span class="label-text">End date</span>
               <input type="date" id="create-end" required />
             </label>
-            <label>
-              Time slots
-              <div class="row">
-                <input type="text" id="slot-input" placeholder="e.g. 9am-12pm" />
-                <button type="button" id="add-slot">Add slot</button>
-              </div>
-            </label>
-            <div id="slot-chips" class="chips"></div>
-            <div class="row">
-              <button type="submit" class="primary">Create event</button>
+          </div>
+          <div>
+            <span class="label-text">Time slots</span>
+            <div class="row slot-input-row">
+              <input type="text" id="slot-input" placeholder="e.g. 9am–12pm" />
+              <button type="button" id="add-slot">Add</button>
             </div>
-          </form>
-        </section>
+            <div id="slot-chips" class="chips"></div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="primary">Create event</button>
+          </div>
+        </form>
+      </section>
 
-        <section id="manage-section" class="section hidden">
-          <h2>Manage events</h2>
-          <div id="manage-list" class="manage-list"></div>
-          <div id="manage-empty" class="empty hidden">No events yet.</div>
-        </section>
+      <section id="manage-section" class="section hidden">
+        <h2>Manage events</h2>
+        <div id="manage-list" class="manage-list"></div>
+        <div id="manage-empty" class="empty hidden">No events yet.</div>
+      </section>
+    </main>
 
-        <section id="logout-section" class="section hidden">
-          <button id="logout-button">Log out</button>
-        </section>
-      </main>
-
-      <footer class="site-footer">
+    <footer class="site-footer">
+      <div class="container site-footer-inner">
         <a href="index.html">Public site</a>
-      </footer>
-    </div>
+      </div>
+    </footer>
 
     <script src="js/config.js"></script>
     <script src="js/api.js"></script>

@@ -7,34 +7,40 @@
     <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
-    <div class="container">
-      <header class="site-header">
-        <h1><a href="index.html">Group Events</a></h1>
-      </header>
+    <header class="site-header">
+      <div class="site-header-inner">
+        <a class="brand" href="index.html">Group Events</a>
+        <nav class="site-nav">
+          <a href="index.html" class="active" aria-current="page">Events</a>
+          <a href="admin.html">Admin</a>
+        </nav>
+      </div>
+    </header>
 
-      <main>
-        <div id="page-error" class="error"></div>
+    <main class="container">
+      <div id="page-error" class="banner banner-error"></div>
 
-        <div class="tabs" role="tablist">
-          <button class="tab active" data-tab="active" role="tab">Active</button>
-          <button class="tab" data-tab="expired" role="tab">Expired</button>
-        </div>
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-tab="active" role="tab">Active</button>
+        <button class="tab" data-tab="expired" role="tab">Expired</button>
+      </div>
 
-        <div id="event-list">
-          <div id="active-events" class="event-list"></div>
-          <div id="expired-events" class="event-list hidden"></div>
+      <div id="event-list">
+        <div id="active-events" class="event-list"></div>
+        <div id="expired-events" class="event-list hidden"></div>
 
-          <div id="empty-active" class="empty hidden">No active events.</div>
-          <div id="empty-expired" class="empty hidden">No expired events.</div>
+        <div id="empty-active" class="empty hidden">No active events.</div>
+        <div id="empty-expired" class="empty hidden">No expired events.</div>
 
-          <div id="loading" class="empty">Loading…</div>
-        </div>
-      </main>
+        <div id="loading" class="empty">Loading…</div>
+      </div>
+    </main>
 
-      <footer class="site-footer">
-        <a href="admin.html">Admin</a>
-      </footer>
-    </div>
+    <footer class="site-footer">
+      <div class="container site-footer-inner">
+        <span class="muted">Group availability scheduling</span>
+      </div>
+    </footer>
 
     <script src="js/config.js"></script>
     <script src="js/api.js"></script>
