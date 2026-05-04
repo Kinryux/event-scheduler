@@ -88,6 +88,7 @@ a {
 .tab.active {
   color: var(--fg);
   border-bottom-color: var(--accent);
+  background: var(--surface);
 }
 
 /* Event list / cards */
@@ -265,6 +266,18 @@ button:disabled {
 .availability-grid th {
   background: var(--surface);
   font-weight: 600;
+}
+
+.availability-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.availability-grid input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
 }
 
 .availability-grid td:first-child,

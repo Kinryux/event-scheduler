@@ -3,17 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Event — Event Availability</title>
+    <title>Event — Group Events</title>
     <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
     <div class="container">
       <header class="site-header">
-        <h1><a href="index.html">Event Availability</a></h1>
+        <h1><a href="index.html">Group Events</a></h1>
       </header>
 
-      <main class="event-detail">
-        <section id="event-header">
+      <main>
+        <div id="page-error" class="error"></div>
+
+        <section id="event-header" class="hidden">
           <h2 id="event-title"></h2>
           <div id="event-badges" class="row"></div>
           <p id="event-dates" class="meta"></p>
@@ -22,17 +24,17 @@
 
         <section class="section">
           <h2>Submitters</h2>
-          <ul id="submitter-list" class="submitters"></ul>
+          <div id="submitters"></div>
           <div id="submitter-empty" class="empty hidden">No submissions yet.</div>
         </section>
 
-        <section id="submit-section" class="section">
+        <section id="submit-section" class="section hidden">
           <h2>Submit your availability</h2>
-          <div id="submit-error" class="error"></div>
+          <div id="submit-status"></div>
           <form id="submit-form">
             <label>
               Your name
-              <input type="text" id="user-name" required />
+              <input type="text" id="user-name" autocomplete="name" required />
             </label>
             <div class="scroll-x">
               <table id="availability-grid" class="availability-grid"></table>
@@ -43,8 +45,8 @@
           </form>
         </section>
 
-        <section id="locked-notice" class="section hidden">
-          <div class="notice">Submissions are closed for this event.</div>
+        <section id="closed-notice" class="section hidden">
+          <div class="notice" id="closed-message"></div>
         </section>
       </main>
 

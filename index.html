@@ -3,30 +3,32 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Event Availability</title>
+    <title>Group Events</title>
     <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
     <div class="container">
       <header class="site-header">
-        <h1><a href="index.html">Event Availability</a></h1>
+        <h1><a href="index.html">Group Events</a></h1>
       </header>
 
       <main>
+        <div id="page-error" class="error"></div>
+
         <div class="tabs" role="tablist">
           <button class="tab active" data-tab="active" role="tab">Active</button>
           <button class="tab" data-tab="expired" role="tab">Expired</button>
         </div>
 
-        <section id="tab-active" class="tab-panel">
-          <div id="active-list" class="event-list"></div>
-          <div id="active-empty" class="empty hidden">No active events.</div>
-        </section>
+        <div id="event-list">
+          <div id="active-events" class="event-list"></div>
+          <div id="expired-events" class="event-list hidden"></div>
 
-        <section id="tab-expired" class="tab-panel hidden">
-          <div id="expired-list" class="event-list"></div>
-          <div id="expired-empty" class="empty hidden">No expired events.</div>
-        </section>
+          <div id="empty-active" class="empty hidden">No active events.</div>
+          <div id="empty-expired" class="empty hidden">No expired events.</div>
+
+          <div id="loading" class="empty">Loading…</div>
+        </div>
       </main>
 
       <footer class="site-footer">
