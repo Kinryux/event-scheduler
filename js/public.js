@@ -13,11 +13,16 @@
     els.error.textContent = '';
   }
 
+  function formatDisplayDate(iso, opts) {
+    const base = opts || { weekday: 'short', month: 'short', day: 'numeric' };
+    return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, Object.assign({}, base, { timeZone: 'UTC' }));
+  }
+
   function formatDateRange(startISO, endISO) {
     const opts = { month: 'short', day: 'numeric' };
-    const start = new Date(startISO + 'T00:00:00Z').toLocaleDateString(undefined, opts);
+    const start = formatDisplayDate(startISO, opts);
     if (startISO === endISO) return start;
-    const end = new Date(endISO + 'T00:00:00Z').toLocaleDateString(undefined, opts);
+    const end = formatDisplayDate(endISO, opts);
     return start + ' – ' + end;
   }
 
