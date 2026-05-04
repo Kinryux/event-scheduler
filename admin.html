@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin — Event Availability</title>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header class="site-header">
+        <h1><a href="index.html">Event Availability</a> — Admin</h1>
+      </header>
+
+      <main>
+        <div id="admin-error" class="error"></div>
+
+        <section id="login-section">
+          <h2>Admin login</h2>
+          <p class="meta">
+            This page is gated by a shared passphrase. Anyone with the passphrase
+            can create or delete events. Don't reuse a sensitive password.
+          </p>
+          <form id="login-form">
+            <label>
+              Passphrase
+              <input type="password" id="admin-pass" required />
+            </label>
+            <div class="row">
+              <button type="submit" class="primary">Unlock</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="create-section" class="section hidden">
+          <h2>Create event</h2>
+          <form id="create-form">
+            <label>
+              Title
+              <input type="text" id="create-title" required />
+            </label>
+            <label>
+              Description
+              <textarea id="create-description"></textarea>
+            </label>
+            <label>
+              Start date
+              <input type="date" id="create-start" required />
+            </label>
+            <label>
+              End date
+              <input type="date" id="create-end" required />
+            </label>
+            <label>
+              Time slots
+              <div class="row">
+                <input type="text" id="slot-input" placeholder="e.g. 9am-12pm" />
+                <button type="button" id="add-slot">Add slot</button>
+              </div>
+            </label>
+            <div id="slot-chips" class="chips"></div>
+            <div class="row">
+              <button type="submit" class="primary">Create event</button>
+            </div>
+          </form>
+        </section>
+
+        <section id="manage-section" class="section hidden">
+          <h2>Manage events</h2>
+          <div id="manage-list" class="manage-list"></div>
+          <div id="manage-empty" class="empty hidden">No events yet.</div>
+        </section>
+
+        <section id="logout-section" class="section hidden">
+          <button id="logout-button">Log out</button>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <a href="index.html">Public site</a>
+      </footer>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/admin.js"></script>
+  </body>
+</html>
