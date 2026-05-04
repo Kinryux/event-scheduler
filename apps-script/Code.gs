@@ -1,6 +1,11 @@
 // Event Availability Backend
 // Paste this entire file into the bound Apps Script editor (script.google.com -> the project bound to your sheet)
 // Set ADMIN_PASS in Script Properties before deploying.
+
+function setup() {
+  ensureSheets_();
+}
+
 const SHEET_ID = '1U9yhE6_33jnlEcll35d2nIfo6QxmfXnsJ_JTCWops04';
 
 const EVENTS_SHEET = 'Events';
