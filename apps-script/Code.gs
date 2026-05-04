@@ -63,7 +63,7 @@ function todayISO_() {
 }
 
 function isExpired_(endDate) {
-  return todayISO_() > String(endDate);
+  return todayISO_() > normalizeDate_(endDate);
 }
 
 function normalizeName_(name) {
@@ -98,6 +98,13 @@ function parseLocked_(value) {
   return s === 'TRUE';
 }
 
+function normalizeDate_(val) {
+  if (val instanceof Date) {
+    return Utilities.formatDate(val, 'UTC', 'yyyy-MM-dd');
+  }
+  return String(val).slice(0, 10);
+}
+
 function getEventsData_() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName(EVENTS_SHEET);
@@ -110,9 +117,9 @@ function getEventsData_() {
     event_id: String(row[0]),
     title: row[1],
     description: row[2],
-    start_date: String(row[3]),
-    end_date: String(row[4]),
-    time_slots: parseTimeSlots_(row[5]),
+    start_date: normalizeDate_(row[3]),
+    end_date: normalizeDate_(row[4]),
+    time_slots: typeof row[5] === 'string' ? JSON.parse(row[5]) : row[5],
     locked: parseLocked_(row[6]),
     created_at: row[7]
   }));
