@@ -99,10 +99,20 @@ function parseLocked_(value) {
 }
 
 function normalizeDate_(val) {
-  if (val instanceof Date) {
+  if (!val && val !== 0) return '';
+  // Duck-type Date detection — instanceof can fail in Apps Script
+  if (typeof val === 'object' && typeof val.getTime === 'function') {
     return Utilities.formatDate(val, 'UTC', 'yyyy-MM-dd');
   }
-  return String(val).slice(0, 10);
+  const s = String(val);
+  // Already an ISO date or timestamp — take YYYY-MM-DD prefix
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  // Last resort: parse and format
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return Utilities.formatDate(parsed, 'UTC', 'yyyy-MM-dd');
+  }
+  return s;
 }
 
 function getEventsData_() {
