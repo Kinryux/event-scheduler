@@ -48,6 +48,12 @@
         event_id: eventId
       });
     },
+    updateEvent: function (adminPass, eventId, payload) {
+      return post('updateEvent', Object.assign({
+        adminPass: adminPass,
+        event_id: eventId
+      }, payload || {}));
+    },
     updateSubmission: function (adminPass, submissionId, availability) {
       return post('updateSubmission', {
         adminPass: adminPass,

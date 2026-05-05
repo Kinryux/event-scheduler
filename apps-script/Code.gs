@@ -274,6 +274,8 @@ function doPost(e) {
       return jsonResponse_(safeAdmin_(function () { return handleLockEvent_(body); }));
     case 'deleteEvent':
       return jsonResponse_(safeAdmin_(function () { return handleDeleteEvent_(body); }));
+    case 'updateEvent':
+      return jsonResponse_(safeAdmin_(function () { return handleUpdateEvent_(body); }));
     case 'updateSubmission':
       return jsonResponse_(safeAdmin_(function () { return handleUpdateSubmission_(body); }));
     case 'deleteSubmission':
@@ -428,6 +430,81 @@ function handleSubmitAvailability_(body) {
     lock.releaseLock();
   }
   return { ok: true };
+}
+
+function handleUpdateEvent_(body) {
+  requireAdmin_(body.adminPass);
+  const eventId = body.event_id;
+  const title = body.title;
+  const description = body.description == null ? '' : body.description;
+  const dates = body.dates;
+  const timeSlots = body.time_slots;
+  if (!eventId || !title ||
+      !Array.isArray(dates) || dates.length === 0 ||
+      !Array.isArray(timeSlots) || timeSlots.length === 0) {
+    throw new Error('Missing required fields');
+  }
+  const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+  for (let i = 0; i < dates.length; i++) {
+    if (typeof dates[i] !== 'string' || !ISO_RE.test(dates[i])) {
+      throw new Error('Invalid date in dates array: ' + dates[i]);
+    }
+  }
+  const uniqueDates = Array.from(new Set(dates)).sort();
+  const dateSet = {};
+  for (let i = 0; i < uniqueDates.length; i++) dateSet[uniqueDates[i]] = true;
+  const slotSet = {};
+  for (let i = 0; i < timeSlots.length; i++) slotSet[timeSlots[i]] = true;
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  let removedCount = 0;
+  try {
+    const found = findEventById_(eventId);
+    if (!found.event) throw new Error('Event not found');
+    const sheet = found.sheet;
+    const titleCol = EVENTS_HEADERS.indexOf('title') + 1;
+    const descCol = EVENTS_HEADERS.indexOf('description') + 1;
+    const datesCol = EVENTS_HEADERS.indexOf('dates') + 1;
+    const slotsCol = EVENTS_HEADERS.indexOf('time_slots') + 1;
+    sheet.getRange(found.event.rowIndex, titleCol).setValue(title);
+    sheet.getRange(found.event.rowIndex, descCol).setValue(description);
+    sheet.getRange(found.event.rowIndex, datesCol).setValue(JSON.stringify(uniqueDates));
+    sheet.getRange(found.event.rowIndex, slotsCol).setValue(JSON.stringify(timeSlots));
+
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const subs = ss.getSheetByName(SUBMISSIONS_SHEET);
+    if (subs) {
+      const lastRow = subs.getLastRow();
+      if (lastRow >= 2) {
+        const values = subs.getRange(2, 1, lastRow - 1, SUBMISSIONS_HEADERS.length).getValues();
+        const availCol = SUBMISSIONS_HEADERS.indexOf('availability') + 1;
+        for (let i = 0; i < values.length; i++) {
+          if (String(values[i][1]) !== eventId) continue;
+          const orig = parseAvailability_(values[i][3]);
+          const cleaned = {};
+          let modified = false;
+          for (const date in orig) {
+            if (!dateSet[date]) { modified = true; continue; }
+            const slots = Array.isArray(orig[date]) ? orig[date] : [];
+            const filtered = [];
+            for (let j = 0; j < slots.length; j++) {
+              if (slotSet[slots[j]]) filtered.push(slots[j]);
+            }
+            if (filtered.length !== slots.length) modified = true;
+            cleaned[date] = filtered;
+          }
+          if (modified) {
+            removedCount++;
+            subs.getRange(i + 2, availCol).setValue(JSON.stringify(cleaned));
+          }
+        }
+      }
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  return { ok: true, removed_count: removedCount };
 }
 
 function handleLockEvent_(body) {

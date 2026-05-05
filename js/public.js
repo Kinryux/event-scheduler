@@ -125,6 +125,7 @@
   }
 
   function init() {
+    if (window.Auth) Auth.init();
     els.error = $('page-error');
     els.activeList = $('active-events');
     els.expiredList = $('expired-events');

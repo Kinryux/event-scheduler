@@ -18,6 +18,7 @@
     </header>
 
     <main class="container">
+      <div id="signed-out-banner" class="banner banner-warning hidden"></div>
       <div id="admin-error" class="banner banner-error"></div>
 
       <section id="login-section">
@@ -94,8 +95,55 @@
       </div>
     </footer>
 
+    <div id="edit-modal-backdrop" class="modal-backdrop hidden">
+      <div class="modal" role="dialog" aria-label="Edit event">
+        <button type="button" class="modal-close" id="edit-modal-close" aria-label="Close">×</button>
+        <h2>Edit event</h2>
+        <div id="edit-status" class="banner"></div>
+        <form id="edit-form">
+          <label>
+            <span class="label-text">Title</span>
+            <input type="text" id="edit-title" required />
+          </label>
+          <label>
+            <span class="label-text">Description</span>
+            <textarea id="edit-description" rows="3"></textarea>
+          </label>
+          <div>
+            <span class="label-text">Dates</span>
+            <div class="calendar" id="edit-calendar">
+              <div class="calendar-header">
+                <button type="button" class="calendar-nav" id="edit-cal-prev" aria-label="Previous month">‹</button>
+                <span class="calendar-title" id="edit-cal-title"></span>
+                <button type="button" class="calendar-nav" id="edit-cal-next" aria-label="Next month">›</button>
+              </div>
+              <div class="calendar-weekdays">
+                <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+              </div>
+              <div class="calendar-grid" id="edit-cal-grid"></div>
+            </div>
+            <div id="edit-date-chips" class="chips date-chips"></div>
+          </div>
+          <div>
+            <span class="label-text">Time slots</span>
+            <div class="row slot-input-row">
+              <input type="text" id="edit-slot-input" placeholder="e.g. 9am–12pm" />
+              <button type="button" id="edit-add-slot">Add</button>
+            </div>
+            <div id="edit-slot-chips" class="chips"></div>
+          </div>
+          <div id="edit-removal-warning" class="banner banner-warning hidden"></div>
+          <div class="form-actions">
+            <button type="submit" class="primary">Save changes</button>
+            <button type="button" class="ghost" id="edit-cancel">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <script src="js/config.js"></script>
     <script src="js/api.js"></script>
+    <script src="js/auth.js"></script>
     <script src="js/admin.js"></script>
   </body>
 </html>
