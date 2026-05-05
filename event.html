@@ -22,6 +22,14 @@
 
       <div id="page-error" class="banner banner-error"></div>
 
+      <div id="final-banner" class="final-banner hidden">
+        <span class="final-banner-icon">✓</span>
+        <div>
+          <div class="final-banner-label">Final time</div>
+          <div id="final-banner-content" class="final-banner-content"></div>
+        </div>
+      </div>
+
       <section id="event-header" class="event-detail-header hidden">
         <div class="row" id="event-badges"></div>
         <h1 id="event-title"></h1>
@@ -35,11 +43,37 @@
         <div id="submitter-empty" class="empty hidden">No submissions yet.</div>
       </section>
 
+      <section id="admin-tools" class="section admin-section hidden">
+        <div class="section-head">
+          <h2>Admin tools</h2>
+          <button type="button" id="export-csv" class="ghost">Export CSV</button>
+        </div>
+        <div id="matrix-empty" class="empty hidden">
+          The comparison matrix will appear once submissions exist.
+        </div>
+        <div id="matrix-wrap">
+          <div class="scroll-x">
+            <table id="comparison-matrix" class="matrix"></table>
+          </div>
+          <p class="muted small" id="matrix-help">
+            Toggle "Mark final" on the slots you want to lock in, then save.
+          </p>
+          <div class="form-actions matrix-actions">
+            <button type="button" id="save-final" class="primary">Save as final time(s)</button>
+            <button type="button" id="clear-final" class="ghost hidden">Clear final</button>
+          </div>
+        </div>
+      </section>
+
       <section id="submit-section" class="section hidden">
         <h2>Submit your availability</h2>
         <p class="muted small">
           If you've already submitted, type your same name to load and update your picks.
         </p>
+        <div id="editing-banner" class="banner banner-warning hidden">
+          <span>Editing <strong id="editing-name"></strong>'s submission.</span>
+          <button type="button" id="cancel-edit" class="ghost cancel-edit-btn">Cancel</button>
+        </div>
         <div id="submit-status" class="banner"></div>
         <form id="submit-form">
           <label>

@@ -51,6 +51,12 @@
     titleText.textContent = ev.title || '(untitled)';
     titleRow.appendChild(titleText);
 
+    if (ev.final_slots && ev.final_slots.length > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'badge finalized';
+      badge.textContent = '✓ Finalized';
+      titleRow.appendChild(badge);
+    }
     if (ev.locked) {
       const badge = document.createElement('span');
       badge.className = 'badge locked';

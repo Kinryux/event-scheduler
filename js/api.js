@@ -47,6 +47,26 @@
         adminPass: adminPass,
         event_id: eventId
       });
+    },
+    updateSubmission: function (adminPass, submissionId, availability) {
+      return post('updateSubmission', {
+        adminPass: adminPass,
+        submission_id: submissionId,
+        availability: availability
+      });
+    },
+    deleteSubmission: function (adminPass, submissionId) {
+      return post('deleteSubmission', {
+        adminPass: adminPass,
+        submission_id: submissionId
+      });
+    },
+    setFinalSlots: function (adminPass, eventId, finalSlots) {
+      return post('setFinalSlots', {
+        adminPass: adminPass,
+        event_id: eventId,
+        final_slots: finalSlots
+      });
     }
   };
 })();
