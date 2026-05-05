@@ -18,7 +18,8 @@ const EVENTS_HEADERS = [
   'dates',
   'time_slots',
   'locked',
-  'created_at'
+  'created_at',
+  'final_slots'
 ];
 
 const SUBMISSIONS_HEADERS = [
@@ -123,6 +124,17 @@ function normalizeDate_(val) {
   return s;
 }
 
+function parseFinalSlots_(value) {
+  if (value == null || value === '') return [];
+  if (Array.isArray(value)) return value;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 function parseDates_(value) {
   let arr;
   if (Array.isArray(value)) {
@@ -155,7 +167,8 @@ function getEventsData_() {
     dates: parseDates_(row[3]),
     time_slots: typeof row[4] === 'string' ? JSON.parse(row[4]) : row[4],
     locked: parseLocked_(row[5]),
-    created_at: row[6]
+    created_at: row[6],
+    final_slots: parseFinalSlots_(row[7])
   }));
   return { sheet: sheet, rows: rows };
 }
@@ -218,6 +231,7 @@ function serializeEvent_(ev, submissionCount) {
     time_slots: ev.time_slots,
     locked: ev.locked,
     created_at: ev.created_at,
+    final_slots: ev.final_slots || [],
     submission_count: submissionCount || 0
   };
 }
@@ -260,6 +274,12 @@ function doPost(e) {
       return jsonResponse_(safeAdmin_(function () { return handleLockEvent_(body); }));
     case 'deleteEvent':
       return jsonResponse_(safeAdmin_(function () { return handleDeleteEvent_(body); }));
+    case 'updateSubmission':
+      return jsonResponse_(safeAdmin_(function () { return handleUpdateSubmission_(body); }));
+    case 'deleteSubmission':
+      return jsonResponse_(safeAdmin_(function () { return handleDeleteSubmission_(body); }));
+    case 'setFinalSlots':
+      return jsonResponse_(safeAdmin_(function () { return handleSetFinalSlots_(body); }));
     default:
       return jsonResponse_({ ok: false, error: 'Unknown action' });
   }
@@ -340,7 +360,8 @@ function handleCreateEvent_(body) {
     JSON.stringify(uniqueDates),
     JSON.stringify(timeSlots),
     'FALSE',
-    createdAt
+    createdAt,
+    '[]'
   ]);
   return { ok: true, event_id: eventId };
 }
@@ -355,6 +376,9 @@ function handleSubmitAvailability_(body) {
   const found = findEventById_(eventId);
   if (!found.event) {
     return { ok: false, error: 'Event not found' };
+  }
+  if (found.event.final_slots && found.event.final_slots.length > 0) {
+    return { ok: false, error: 'Event is finalized — no further submissions' };
   }
   if (found.event.locked) {
     return { ok: false, error: 'Event is locked' };
@@ -415,6 +439,86 @@ function handleLockEvent_(body) {
   if (!found.event) throw new Error('Event not found');
   const lockedColIndex = EVENTS_HEADERS.indexOf('locked') + 1;
   found.sheet.getRange(found.event.rowIndex, lockedColIndex).setValue(locked ? 'TRUE' : 'FALSE');
+  return { ok: true };
+}
+
+function handleUpdateSubmission_(body) {
+  requireAdmin_(body.adminPass);
+  const submissionId = body.submission_id;
+  const availability = body.availability;
+  if (!submissionId || availability == null || typeof availability !== 'object') {
+    throw new Error('Missing required fields');
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName(SUBMISSIONS_SHEET);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) throw new Error('Submission not found');
+    const values = sheet.getRange(2, 1, lastRow - 1, SUBMISSIONS_HEADERS.length).getValues();
+    let rowIndex = -1;
+    for (let i = 0; i < values.length; i++) {
+      if (String(values[i][0]) === submissionId) { rowIndex = i + 2; break; }
+    }
+    if (rowIndex < 0) throw new Error('Submission not found');
+    const availCol = SUBMISSIONS_HEADERS.indexOf('availability') + 1;
+    const submittedCol = SUBMISSIONS_HEADERS.indexOf('submitted_at') + 1;
+    sheet.getRange(rowIndex, availCol).setValue(JSON.stringify(availability));
+    sheet.getRange(rowIndex, submittedCol).setValue(new Date().toISOString());
+  } finally {
+    lock.releaseLock();
+  }
+  return { ok: true };
+}
+
+function handleDeleteSubmission_(body) {
+  requireAdmin_(body.adminPass);
+  const submissionId = body.submission_id;
+  if (!submissionId) throw new Error('Missing submission_id');
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName(SUBMISSIONS_SHEET);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) throw new Error('Submission not found');
+    const values = sheet.getRange(2, 1, lastRow - 1, SUBMISSIONS_HEADERS.length).getValues();
+    for (let i = 0; i < values.length; i++) {
+      if (String(values[i][0]) === submissionId) {
+        sheet.deleteRow(i + 2);
+        return { ok: true };
+      }
+    }
+    throw new Error('Submission not found');
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleSetFinalSlots_(body) {
+  requireAdmin_(body.adminPass);
+  const eventId = body.event_id;
+  const finalSlots = body.final_slots;
+  if (!eventId) throw new Error('Missing event_id');
+  if (!Array.isArray(finalSlots)) throw new Error('final_slots must be an array');
+  for (let i = 0; i < finalSlots.length; i++) {
+    const fs = finalSlots[i];
+    if (!fs || typeof fs !== 'object' ||
+        typeof fs.date !== 'string' || typeof fs.slot !== 'string') {
+      throw new Error('Invalid final_slots entry');
+    }
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const found = findEventById_(eventId);
+    if (!found.event) throw new Error('Event not found');
+    const colIndex = EVENTS_HEADERS.indexOf('final_slots') + 1;
+    found.sheet.getRange(found.event.rowIndex, colIndex).setValue(JSON.stringify(finalSlots));
+  } finally {
+    lock.releaseLock();
+  }
   return { ok: true };
 }
 

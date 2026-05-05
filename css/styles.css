@@ -157,6 +157,7 @@ main.container { padding-top: 40px; padding-bottom: 64px; }
 }
 .badge.locked { background: var(--warning-soft); color: var(--warning); border-color: transparent; }
 .badge.expired { background: var(--surface-alt); color: var(--text-muted); border-color: var(--border); }
+.badge.finalized { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 
 /* ---------- empty state ---------- */
 .empty { text-align: center; padding: 32px 12px; color: var(--text-muted); font-size: 14px; }
@@ -370,6 +371,117 @@ button.ghost:hover, .btn.ghost:hover { background: var(--surface-alt); }
 .banner-warning { background: var(--warning-soft); color: var(--warning); border-left-color: var(--warning); }
 
 .caveat { margin-bottom: 18px; font-style: italic; }
+
+/* ---------- final-time banner ---------- */
+.final-banner {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, var(--accent-soft), transparent 70%), var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  margin-bottom: 20px;
+}
+.final-banner-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  width: 36px; height: 36px;
+  background: var(--accent); color: #fff;
+  border-radius: 50%; font-weight: 700; font-size: 18px;
+}
+.final-banner-label {
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--accent);
+}
+.final-banner-content { font-size: 16px; font-weight: 500; color: var(--text); margin-top: 2px; }
+
+/* ---------- admin tools section ---------- */
+.admin-section {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.admin-section .section-head { margin-bottom: 8px; }
+.admin-section h2 { font-size: 17px; }
+.matrix-actions { margin-top: 14px; }
+
+/* ---------- comparison matrix ---------- */
+.matrix {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  background: var(--surface);
+}
+.matrix th, .matrix td {
+  padding: 8px 10px;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  vertical-align: middle;
+}
+.matrix th:last-child, .matrix td:last-child { border-right: none; }
+.matrix tbody tr:last-child td { border-bottom: none; }
+.matrix thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--surface-alt); color: var(--text-muted);
+  font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.matrix tbody tr:hover td:not(.total) { background: var(--accent-soft); }
+.matrix .slot-col { text-align: left; min-width: 180px; max-width: 240px; }
+.matrix-slot-label { display: flex; flex-direction: column; gap: 1px; line-height: 1.25; }
+.matrix-date { font-size: 11px; color: var(--text-muted); }
+.matrix-slot { font-weight: 500; color: var(--text); }
+.matrix-toggle {
+  margin-top: 6px;
+  padding: 3px 10px; min-height: 24px;
+  font-size: 11px; font-weight: 500;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.matrix-toggle:hover { background: var(--surface-alt); color: var(--text); }
+.matrix-toggle[aria-pressed="true"] {
+  background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.matrix .check { color: var(--success); font-weight: 700; }
+.matrix .total { font-weight: 600; color: var(--text); transition: background-color var(--t-fast); }
+.matrix tbody tr.final td.slot-col {
+  border-left: 3px solid var(--accent);
+  padding-left: 7px;
+}
+.matrix tbody tr.final { background: var(--accent-soft); }
+
+/* ---------- submitter row admin actions ---------- */
+.submitter-name { font-weight: 500; }
+.submitter-right {
+  display: flex; align-items: center; gap: 6px;
+}
+.submitter-action {
+  font-size: 12px;
+  padding: 3px 9px; min-height: 24px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.submitter-action:hover { background: var(--surface-alt); color: var(--text); }
+.submitter-action.danger { color: var(--danger); }
+.submitter-action.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+
+/* ---------- editing banner ---------- */
+#editing-banner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cancel-edit-btn {
+  margin-left: auto;
+  font-size: 12px; padding: 4px 10px; min-height: 26px;
+}
 
 /* ---------- responsive ---------- */
 @media (max-width: 640px) {
