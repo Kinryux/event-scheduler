@@ -18,12 +18,21 @@
     return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, Object.assign({}, base, { timeZone: 'UTC' }));
   }
 
-  function formatDateRange(startISO, endISO) {
+  function formatDatesList(isoDates) {
+    const sorted = (isoDates || []).slice().sort();
+    if (sorted.length === 0) return '';
+    const isContiguous = sorted.every((d, i) => {
+      if (i === 0) return true;
+      const prev = new Date(sorted[i - 1] + 'T00:00:00Z');
+      const curr = new Date(d + 'T00:00:00Z');
+      return (curr - prev) === 86400000;
+    });
     const opts = { month: 'short', day: 'numeric' };
-    const start = formatDisplayDate(startISO, opts);
-    if (startISO === endISO) return start;
-    const end = formatDisplayDate(endISO, opts);
-    return start + ' – ' + end;
+    if (isContiguous && sorted.length > 1) {
+      return formatDisplayDate(sorted[0], opts) + ' – ' +
+        formatDisplayDate(sorted[sorted.length - 1], opts);
+    }
+    return sorted.map(function (d) { return formatDisplayDate(d, opts); }).join(', ');
   }
 
   function pluralize(n, word) {
@@ -53,9 +62,9 @@
 
     const meta = document.createElement('div');
     meta.className = 'meta';
-    const range = formatDateRange(ev.start_date, ev.end_date);
+    const range = formatDatesList(ev.dates || []);
     const count = pluralize(ev.submission_count || 0, 'submission');
-    meta.textContent = range + ' · ' + count;
+    meta.textContent = (range ? range + ' · ' : '') + count;
     a.appendChild(meta);
 
     return a;

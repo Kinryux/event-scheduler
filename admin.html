@@ -52,15 +52,20 @@
             <span class="label-text">Description</span>
             <textarea id="create-description" rows="3"></textarea>
           </label>
-          <div class="grid-two">
-            <label>
-              <span class="label-text">Start date</span>
-              <input type="date" id="create-start" required />
-            </label>
-            <label>
-              <span class="label-text">End date</span>
-              <input type="date" id="create-end" required />
-            </label>
+          <div>
+            <span class="label-text">Dates</span>
+            <div class="calendar" id="calendar">
+              <div class="calendar-header">
+                <button type="button" class="calendar-nav" id="cal-prev" aria-label="Previous month">‹</button>
+                <span class="calendar-title" id="cal-title"></span>
+                <button type="button" class="calendar-nav" id="cal-next" aria-label="Next month">›</button>
+              </div>
+              <div class="calendar-weekdays">
+                <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+              </div>
+              <div class="calendar-grid" id="cal-grid"></div>
+            </div>
+            <div id="date-chips" class="chips date-chips"></div>
           </div>
           <div>
             <span class="label-text">Time slots</span>

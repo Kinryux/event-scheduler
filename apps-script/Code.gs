@@ -10,8 +10,7 @@ const EVENTS_HEADERS = [
   'event_id',
   'title',
   'description',
-  'start_date',
-  'end_date',
+  'dates',
   'time_slots',
   'locked',
   'created_at'
@@ -58,12 +57,16 @@ function requireAdmin_(pass) {
 }
 
 function todayISO_() {
-  const tz = Session.getScriptTimeZone();
-  return Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  return Utilities.formatDate(new Date(), 'UTC', 'yyyy-MM-dd');
 }
 
-function isExpired_(endDate) {
-  return todayISO_() > normalizeDate_(endDate);
+function isExpired_(dates) {
+  if (!Array.isArray(dates) || dates.length === 0) return true;
+  let max = dates[0];
+  for (let i = 1; i < dates.length; i++) {
+    if (dates[i] > max) max = dates[i];
+  }
+  return max < todayISO_();
 }
 
 function normalizeName_(name) {
@@ -115,6 +118,23 @@ function normalizeDate_(val) {
   return s;
 }
 
+function parseDates_(value) {
+  let arr;
+  if (Array.isArray(value)) {
+    arr = value;
+  } else if (value == null || value === '') {
+    return [];
+  } else {
+    try {
+      const parsed = JSON.parse(value);
+      arr = Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+  return arr.map(normalizeDate_).filter(function (d) { return d; });
+}
+
 function getEventsData_() {
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName(EVENTS_SHEET);
@@ -127,11 +147,10 @@ function getEventsData_() {
     event_id: String(row[0]),
     title: row[1],
     description: row[2],
-    start_date: normalizeDate_(row[3]),
-    end_date: normalizeDate_(row[4]),
-    time_slots: typeof row[5] === 'string' ? JSON.parse(row[5]) : row[5],
-    locked: parseLocked_(row[6]),
-    created_at: row[7]
+    dates: parseDates_(row[3]),
+    time_slots: typeof row[4] === 'string' ? JSON.parse(row[4]) : row[4],
+    locked: parseLocked_(row[5]),
+    created_at: row[6]
   }));
   return { sheet: sheet, rows: rows };
 }
@@ -190,8 +209,7 @@ function serializeEvent_(ev, submissionCount) {
     event_id: ev.event_id,
     title: ev.title,
     description: ev.description,
-    start_date: ev.start_date,
-    end_date: ev.end_date,
+    dates: ev.dates,
     time_slots: ev.time_slots,
     locked: ev.locked,
     created_at: ev.created_at,
@@ -258,7 +276,7 @@ function handleListEvents_() {
   for (let i = 0; i < data.rows.length; i++) {
     const ev = data.rows[i];
     const serialized = serializeEvent_(ev, counts[ev.event_id] || 0);
-    if (isExpired_(ev.end_date)) {
+    if (isExpired_(ev.dates)) {
       expired.push(serialized);
     } else {
       active.push(serialized);
@@ -293,12 +311,19 @@ function handleCreateEvent_(body) {
   requireAdmin_(body.adminPass);
   const title = body.title;
   const description = body.description == null ? '' : body.description;
-  const startDate = body.start_date;
-  const endDate = body.end_date;
+  const dates = body.dates;
   const timeSlots = body.time_slots;
-  if (!title || !startDate || !endDate || !Array.isArray(timeSlots) || timeSlots.length === 0) {
+  if (!title || !Array.isArray(dates) || dates.length === 0 ||
+      !Array.isArray(timeSlots) || timeSlots.length === 0) {
     throw new Error('Missing required fields');
   }
+  const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
+  for (let i = 0; i < dates.length; i++) {
+    if (typeof dates[i] !== 'string' || !ISO_RE.test(dates[i])) {
+      throw new Error('Invalid date in dates array: ' + dates[i]);
+    }
+  }
+  const uniqueDates = Array.from(new Set(dates)).sort();
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName(EVENTS_SHEET);
   const eventId = Utilities.getUuid();
@@ -307,8 +332,7 @@ function handleCreateEvent_(body) {
     eventId,
     title,
     description,
-    startDate,
-    endDate,
+    JSON.stringify(uniqueDates),
     JSON.stringify(timeSlots),
     'FALSE',
     createdAt
@@ -330,7 +354,7 @@ function handleSubmitAvailability_(body) {
   if (found.event.locked) {
     return { ok: false, error: 'Event is locked' };
   }
-  if (isExpired_(found.event.end_date)) {
+  if (isExpired_(found.event.dates)) {
     return { ok: false, error: 'Event has expired' };
   }
 

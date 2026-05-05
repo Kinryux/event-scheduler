@@ -6,14 +6,32 @@
     return document.getElementById(id);
   }
 
-  function datesInRange(startISO, endISO) {
-    const out = [];
-    const start = new Date(startISO + 'T00:00:00Z');
-    const end = new Date(endISO + 'T00:00:00Z');
-    for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
-      out.push(d.toISOString().slice(0, 10));
+  function sortedDates(ev) {
+    return ((ev && ev.dates) ? ev.dates.slice() : []).sort();
+  }
+
+  function maxDate(dates) {
+    if (!dates || dates.length === 0) return '';
+    let max = dates[0];
+    for (let i = 1; i < dates.length; i++) if (dates[i] > max) max = dates[i];
+    return max;
+  }
+
+  function formatDatesList(isoDates) {
+    const sorted = isoDates.slice().sort();
+    if (sorted.length === 0) return '';
+    const isContiguous = sorted.every((d, i) => {
+      if (i === 0) return true;
+      const prev = new Date(sorted[i - 1] + 'T00:00:00Z');
+      const curr = new Date(d + 'T00:00:00Z');
+      return (curr - prev) === 86400000;
+    });
+    const opts = { month: 'short', day: 'numeric' };
+    if (isContiguous && sorted.length > 1) {
+      return formatDisplayDate(sorted[0], opts) + ' – ' +
+        formatDisplayDate(sorted[sorted.length - 1], opts);
     }
-    return out;
+    return sorted.map(function (d) { return formatDisplayDate(d, opts); }).join(', ');
   }
 
   function formatDisplayDate(iso, opts) {
@@ -25,20 +43,13 @@
     return formatDisplayDate(iso);
   }
 
-  function formatDateRange(startISO, endISO) {
-    const opts = { month: 'short', day: 'numeric' };
-    const start = formatDisplayDate(startISO, opts);
-    if (startISO === endISO) return start;
-    const end = formatDisplayDate(endISO, opts);
-    return start + ' – ' + end;
-  }
-
   function todayISO() {
     return new Date().toISOString().slice(0, 10);
   }
 
   function isExpired(ev) {
-    return todayISO() > ev.end_date;
+    const max = maxDate(ev.dates || []);
+    return !max || max < todayISO();
   }
 
   function showPageError(msg) {
@@ -64,7 +75,7 @@
   function renderHeader(ev) {
     $('event-header').classList.remove('hidden');
     $('event-title').textContent = ev.title || '(untitled)';
-    $('event-dates').textContent = formatDateRange(ev.start_date, ev.end_date);
+    $('event-dates').textContent = formatDatesList(ev.dates || []);
     $('event-description').textContent = ev.description || '';
 
     const badges = $('event-badges');
@@ -131,7 +142,7 @@
 
       const picks = document.createElement('div');
       picks.className = 'picks';
-      const dates = datesInRange(ev.start_date, ev.end_date);
+      const dates = sortedDates(ev);
       const lines = [];
       for (const d of dates) {
         const slots = (s.availability && Array.isArray(s.availability[d])) ? s.availability[d] : [];
@@ -153,7 +164,7 @@
     const table = $('availability-grid');
     table.innerHTML = '';
     const slots = ev.time_slots || [];
-    const dates = datesInRange(ev.start_date, ev.end_date);
+    const dates = sortedDates(ev);
 
     const thead = document.createElement('thead');
     const headRow = document.createElement('tr');
@@ -220,7 +231,7 @@
 
   function collectAvailability(ev) {
     const out = {};
-    const dates = datesInRange(ev.start_date, ev.end_date);
+    const dates = sortedDates(ev);
     for (const d of dates) out[d] = [];
     const boxes = $('availability-grid').querySelectorAll('input[type="checkbox"]:checked');
     for (const b of boxes) {
