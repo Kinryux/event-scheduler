@@ -1,6 +1,9 @@
 (function () {
   let pass = '';
   let slots = [];
+  let selectedDates = new Set();
+  let viewYear = 0;
+  let viewMonth = 0; // 0-11
   let cachedEvents = [];
   let cachedActiveIds = new Set();
 
@@ -37,11 +40,21 @@
     return new Date(iso + 'T00:00:00Z').toLocaleDateString(undefined, Object.assign({}, base, { timeZone: 'UTC' }));
   }
 
-  function formatDateRange(startISO, endISO) {
+  function formatDatesList(isoDates) {
+    const sorted = (isoDates || []).slice().sort();
+    if (sorted.length === 0) return '';
+    const isContiguous = sorted.every((d, i) => {
+      if (i === 0) return true;
+      const prev = new Date(sorted[i - 1] + 'T00:00:00Z');
+      const curr = new Date(d + 'T00:00:00Z');
+      return (curr - prev) === 86400000;
+    });
     const opts = { month: 'short', day: 'numeric' };
-    const start = formatDisplayDate(startISO, opts);
-    if (startISO === endISO) return start;
-    return start + ' – ' + formatDisplayDate(endISO, opts);
+    if (isContiguous && sorted.length > 1) {
+      return formatDisplayDate(sorted[0], opts) + ' – ' +
+        formatDisplayDate(sorted[sorted.length - 1], opts);
+    }
+    return sorted.map(function (d) { return formatDisplayDate(d, opts); }).join(', ');
   }
 
   function pluralize(n, word) {
@@ -93,6 +106,98 @@
     renderChips();
   }
 
+  // ---------- calendar ----------
+  function todayUTCISO() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function isoFromYMD(y, m, d) {
+    return y + '-' +
+      String(m + 1).padStart(2, '0') + '-' +
+      String(d).padStart(2, '0');
+  }
+
+  function buildCalendar() {
+    const grid = $('cal-grid');
+    grid.innerHTML = '';
+    const firstOfMonth = new Date(Date.UTC(viewYear, viewMonth, 1));
+    const startDayOfWeek = firstOfMonth.getUTCDay(); // 0 = Sun
+    const daysInMonth = new Date(Date.UTC(viewYear, viewMonth + 1, 0)).getUTCDate();
+    $('cal-title').textContent = firstOfMonth.toLocaleDateString(undefined, {
+      month: 'long', year: 'numeric', timeZone: 'UTC'
+    });
+
+    const today = todayUTCISO();
+    for (let i = 0; i < 42; i++) {
+      const dayNum = i - startDayOfWeek + 1;
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'cal-day';
+      if (dayNum < 1 || dayNum > daysInMonth) {
+        cell.classList.add('cal-day-empty');
+        cell.disabled = true;
+        cell.tabIndex = -1;
+      } else {
+        const iso = isoFromYMD(viewYear, viewMonth, dayNum);
+        cell.dataset.date = iso;
+        cell.textContent = String(dayNum);
+        if (iso < today) {
+          cell.classList.add('disabled');
+          cell.disabled = true;
+        }
+        if (iso === today) cell.classList.add('today');
+        if (selectedDates.has(iso)) cell.classList.add('selected');
+        cell.addEventListener('click', () => toggleDate(iso));
+      }
+      grid.appendChild(cell);
+    }
+  }
+
+  function toggleDate(iso) {
+    if (selectedDates.has(iso)) selectedDates.delete(iso);
+    else selectedDates.add(iso);
+    buildCalendar();
+    renderDateChips();
+  }
+
+  function renderDateChips() {
+    const container = $('date-chips');
+    container.innerHTML = '';
+    const sorted = Array.from(selectedDates).sort();
+    sorted.forEach((iso) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      const label = document.createElement('span');
+      label.textContent = formatDisplayDate(iso);
+      chip.appendChild(label);
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'chip-x';
+      x.setAttribute('aria-label', 'Remove ' + iso);
+      x.textContent = '×';
+      x.addEventListener('click', () => {
+        selectedDates.delete(iso);
+        buildCalendar();
+        renderDateChips();
+      });
+      chip.appendChild(x);
+      container.appendChild(chip);
+    });
+  }
+
+  function gotoMonth(delta) {
+    viewMonth += delta;
+    while (viewMonth < 0) { viewMonth += 12; viewYear -= 1; }
+    while (viewMonth > 11) { viewMonth -= 12; viewYear += 1; }
+    buildCalendar();
+  }
+
+  function initCalendarView() {
+    const now = new Date();
+    viewYear = now.getUTCFullYear();
+    viewMonth = now.getUTCMonth();
+  }
+
   async function loadEvents() {
     try {
       const data = await API.listEvents();
@@ -124,7 +229,9 @@
       const aActive = cachedActiveIds.has(a.event_id);
       const bActive = cachedActiveIds.has(b.event_id);
       if (aActive !== bActive) return aActive ? -1 : 1;
-      return String(a.start_date).localeCompare(String(b.start_date));
+      const aMin = (a.dates && a.dates.length) ? a.dates.slice().sort()[0] : '';
+      const bMin = (b.dates && b.dates.length) ? b.dates.slice().sort()[0] : '';
+      return String(aMin).localeCompare(String(bMin));
     });
 
     for (const ev of sorted) {
@@ -161,9 +268,10 @@
 
     const meta = document.createElement('div');
     meta.className = 'muted small';
+    const range = formatDatesList(ev.dates || []);
     meta.textContent =
-      formatDateRange(ev.start_date, ev.end_date) +
-      ' · ' + pluralize(ev.submission_count || 0, 'submission');
+      (range ? range + ' · ' : '') +
+      pluralize(ev.submission_count || 0, 'submission');
     info.appendChild(meta);
 
     row.appendChild(info);
@@ -247,19 +355,16 @@
 
     const title = $('create-title').value.trim();
     const description = $('create-description').value.trim();
-    const start = $('create-start').value;
-    const end = $('create-end').value;
+    const dates = Array.from(selectedDates).sort();
 
     if (!title) return setBanner(status, 'Title is required.', 'error');
-    if (!start || !end) return setBanner(status, 'Start and end dates are required.', 'error');
-    if (end < start) return setBanner(status, 'End date must be on or after start date.', 'error');
+    if (dates.length === 0) return setBanner(status, 'Select at least one date.', 'error');
     if (slots.length === 0) return setBanner(status, 'Add at least one time slot.', 'error');
 
     const payload = {
       title: title,
       description: description,
-      start_date: start,
-      end_date: end,
+      dates: dates,
       time_slots: slots.slice()
     };
 
@@ -278,7 +383,10 @@
       }
       $('create-form').reset();
       slots = [];
+      selectedDates = new Set();
       renderChips();
+      renderDateChips();
+      buildCalendar();
       setBanner(status, 'Event created.', 'ok');
       await loadEvents();
     } catch (err) {
@@ -329,13 +437,11 @@
     });
     $('logout-button').addEventListener('click', onLogout);
 
-    // Cap end date >= start date in the UI
-    $('create-start').addEventListener('change', () => {
-      const start = $('create-start').value;
-      const endEl = $('create-end');
-      endEl.min = start || '';
-      if (start && endEl.value && endEl.value < start) endEl.value = start;
-    });
+    $('cal-prev').addEventListener('click', () => gotoMonth(-1));
+    $('cal-next').addEventListener('click', () => gotoMonth(1));
+    initCalendarView();
+    buildCalendar();
+    renderDateChips();
 
     pass = getStoredPass();
     if (pass) {
