@@ -630,6 +630,7 @@
   }
 
   function init() {
+    if (window.Auth) Auth.init();
     adminPass = getStoredAdminPass();
 
     wireNamePrefill();

@@ -7,6 +7,14 @@
   let cachedEvents = [];
   let cachedActiveIds = new Set();
 
+  // Edit-event modal state
+  let editingEventId = null;
+  let editSelectedDates = new Set();
+  let editSlots = [];
+  let editViewYear = 0;
+  let editViewMonth = 0;
+  let editOriginal = null; // { dates: Set, slots: Set, submission_count }
+
   function $(id) { return document.getElementById(id); }
 
   function getStoredPass() {
@@ -282,10 +290,15 @@
     const view = document.createElement('a');
     view.href = 'event.html?id=' + encodeURIComponent(ev.event_id);
     view.textContent = 'View';
-    view.target = '_blank';
-    view.rel = 'noopener';
     view.className = 'btn ghost';
     actions.appendChild(view);
+
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'btn ghost';
+    editBtn.textContent = 'Edit';
+    editBtn.addEventListener('click', () => openEditModal(ev));
+    actions.appendChild(editBtn);
 
     const lockBtn = document.createElement('button');
     lockBtn.type = 'button';
@@ -412,17 +425,265 @@
       showAdminError('Could not reach the backend: ' + err.message);
       return;
     }
-    pass = candidate;
-    setStoredPass(pass);
+    if (window.Auth) Auth.signIn(candidate);
+    else setStoredPass(candidate);
     $('admin-pass').value = '';
-    showAdminSections();
-    await loadEvents();
+    window.location.href = 'index.html';
   }
 
   function onLogout() {
-    clearStoredPass();
-    pass = '';
-    location.reload();
+    if (window.Auth) Auth.signOut('manual');
+    else { clearStoredPass(); pass = ''; location.reload(); }
+  }
+
+  // ---------- edit-event modal ----------
+
+  function buildEditCalendar() {
+    const grid = $('edit-cal-grid');
+    grid.innerHTML = '';
+    const firstOfMonth = new Date(Date.UTC(editViewYear, editViewMonth, 1));
+    const startDayOfWeek = firstOfMonth.getUTCDay();
+    const daysInMonth = new Date(Date.UTC(editViewYear, editViewMonth + 1, 0)).getUTCDate();
+    $('edit-cal-title').textContent = firstOfMonth.toLocaleDateString(undefined, {
+      month: 'long', year: 'numeric', timeZone: 'UTC'
+    });
+    const today = new Date().toISOString().slice(0, 10);
+    for (let i = 0; i < 42; i++) {
+      const dayNum = i - startDayOfWeek + 1;
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'cal-day';
+      if (dayNum < 1 || dayNum > daysInMonth) {
+        cell.classList.add('cal-day-empty');
+        cell.disabled = true;
+        cell.tabIndex = -1;
+      } else {
+        const iso = isoFromYMD(editViewYear, editViewMonth, dayNum);
+        cell.dataset.date = iso;
+        cell.textContent = String(dayNum);
+        // Allow selecting past dates when editing existing events (the dates may
+        // already be in the past). Only mark with a "today" ring.
+        if (iso === today) cell.classList.add('today');
+        if (editSelectedDates.has(iso)) cell.classList.add('selected');
+        cell.addEventListener('click', () => toggleEditDate(iso));
+      }
+      grid.appendChild(cell);
+    }
+  }
+
+  function toggleEditDate(iso) {
+    if (editSelectedDates.has(iso)) editSelectedDates.delete(iso);
+    else editSelectedDates.add(iso);
+    buildEditCalendar();
+    renderEditDateChips();
+    refreshRemovalWarning();
+  }
+
+  function renderEditDateChips() {
+    const container = $('edit-date-chips');
+    container.innerHTML = '';
+    Array.from(editSelectedDates).sort().forEach((iso) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      const label = document.createElement('span');
+      label.textContent = formatDisplayDate(iso);
+      chip.appendChild(label);
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'chip-x';
+      x.setAttribute('aria-label', 'Remove ' + iso);
+      x.textContent = '×';
+      x.addEventListener('click', () => {
+        editSelectedDates.delete(iso);
+        buildEditCalendar();
+        renderEditDateChips();
+        refreshRemovalWarning();
+      });
+      chip.appendChild(x);
+      container.appendChild(chip);
+    });
+  }
+
+  function gotoEditMonth(delta) {
+    editViewMonth += delta;
+    while (editViewMonth < 0) { editViewMonth += 12; editViewYear -= 1; }
+    while (editViewMonth > 11) { editViewMonth -= 12; editViewYear += 1; }
+    buildEditCalendar();
+  }
+
+  function renderEditSlotChips() {
+    const container = $('edit-slot-chips');
+    container.innerHTML = '';
+    editSlots.forEach((slot, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      const label = document.createElement('span');
+      label.textContent = slot;
+      chip.appendChild(label);
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'chip-x';
+      x.setAttribute('aria-label', 'Remove ' + slot);
+      x.textContent = '×';
+      x.addEventListener('click', () => {
+        editSlots.splice(i, 1);
+        renderEditSlotChips();
+        refreshRemovalWarning();
+      });
+      chip.appendChild(x);
+      container.appendChild(chip);
+    });
+  }
+
+  function addEditSlot() {
+    const input = $('edit-slot-input');
+    const v = input.value.trim();
+    if (!v) return;
+    if (editSlots.indexOf(v) === -1) editSlots.push(v);
+    input.value = '';
+    input.focus();
+    renderEditSlotChips();
+    refreshRemovalWarning();
+  }
+
+  function refreshRemovalWarning() {
+    const el = $('edit-removal-warning');
+    if (!editOriginal) {
+      el.classList.add('hidden');
+      el.textContent = '';
+      return;
+    }
+    let hasRemoval = false;
+    for (const d of editOriginal.dates) if (!editSelectedDates.has(d)) { hasRemoval = true; break; }
+    if (!hasRemoval) {
+      for (const s of editOriginal.slots) if (editSlots.indexOf(s) === -1) { hasRemoval = true; break; }
+    }
+    const count = editOriginal.submission_count || 0;
+    if (hasRemoval && count > 0) {
+      el.textContent = 'Removing dates/slots will discard those entries from ' +
+        count + ' existing submission' + (count === 1 ? '' : 's') + '.';
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+      el.textContent = '';
+    }
+  }
+
+  function openEditModal(ev) {
+    editingEventId = ev.event_id;
+    $('edit-title').value = ev.title || '';
+    $('edit-description').value = ev.description || '';
+    setBanner($('edit-status'), '', null);
+
+    editSelectedDates = new Set(ev.dates || []);
+    editSlots = (ev.time_slots || []).slice();
+    editOriginal = {
+      dates: new Set(ev.dates || []),
+      slots: new Set(ev.time_slots || []),
+      submission_count: ev.submission_count || 0
+    };
+
+    // View the earliest date's month, or current month if no dates.
+    const sorted = Array.from(editSelectedDates).sort();
+    const anchor = sorted[0] ? new Date(sorted[0] + 'T00:00:00Z') : new Date();
+    editViewYear = anchor.getUTCFullYear();
+    editViewMonth = anchor.getUTCMonth();
+
+    buildEditCalendar();
+    renderEditDateChips();
+    renderEditSlotChips();
+    refreshRemovalWarning();
+
+    $('edit-modal-backdrop').classList.remove('hidden');
+    document.body.classList.add('modal-open');
+  }
+
+  function closeEditModal() {
+    editingEventId = null;
+    editOriginal = null;
+    $('edit-modal-backdrop').classList.add('hidden');
+    document.body.classList.remove('modal-open');
+  }
+
+  async function onEditSave(e) {
+    e.preventDefault();
+    const status = $('edit-status');
+    setBanner(status, '', null);
+
+    const title = $('edit-title').value.trim();
+    const description = $('edit-description').value.trim();
+    const dates = Array.from(editSelectedDates).sort();
+
+    if (!title) return setBanner(status, 'Title is required.', 'error');
+    if (dates.length === 0) return setBanner(status, 'Select at least one date.', 'error');
+    if (editSlots.length === 0) return setBanner(status, 'Add at least one time slot.', 'error');
+
+    const payload = {
+      title: title,
+      description: description,
+      dates: dates,
+      time_slots: editSlots.slice()
+    };
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    setBanner(status, 'Saving…', null);
+    try {
+      const res = await API.updateEvent(pass, editingEventId, payload);
+      if (!res || res.ok !== true) {
+        if (res && res.error === 'Unauthorized') {
+          forceLogin();
+          return;
+        }
+        throw new Error((res && res.error) || 'Could not save changes');
+      }
+      const removed = res.removed_count || 0;
+      if (removed > 0) {
+        setBanner(status, 'Saved. Cleaned up ' + removed + ' submission' + (removed === 1 ? '' : 's') + '.', 'ok');
+      } else {
+        setBanner(status, 'Saved.', 'ok');
+      }
+      await loadEvents();
+      setTimeout(closeEditModal, 600);
+    } catch (err) {
+      setBanner(status, err.message, 'error');
+    } finally {
+      submitBtn.disabled = false;
+    }
+  }
+
+  function wireEditModal() {
+    $('edit-modal-close').addEventListener('click', closeEditModal);
+    $('edit-cancel').addEventListener('click', closeEditModal);
+    $('edit-modal-backdrop').addEventListener('click', (e) => {
+      if (e.target === $('edit-modal-backdrop')) closeEditModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('edit-modal-backdrop').classList.contains('hidden')) {
+        closeEditModal();
+      }
+    });
+    $('edit-form').addEventListener('submit', onEditSave);
+    $('edit-cal-prev').addEventListener('click', () => gotoEditMonth(-1));
+    $('edit-cal-next').addEventListener('click', () => gotoEditMonth(1));
+    $('edit-add-slot').addEventListener('click', addEditSlot);
+    $('edit-slot-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addEditSlot(); }
+    });
+  }
+
+  // ---------- signed-out banner ----------
+
+  function showSignedOutBanner() {
+    const params = new URLSearchParams(window.location.search);
+    const reason = params.get('signedOut');
+    if (reason === 'idle') {
+      const el = $('signed-out-banner');
+      el.textContent = 'Signed out due to inactivity. Sign in to continue.';
+      el.classList.remove('hidden');
+    }
+    if (reason) {
+      window.history.replaceState({}, '', 'admin.html');
+    }
   }
 
   function init() {
@@ -443,13 +704,18 @@
     buildCalendar();
     renderDateChips();
 
-    pass = getStoredPass();
+    wireEditModal();
+    showSignedOutBanner();
+
+    pass = (window.Auth && Auth.getPass()) || getStoredPass();
     if (pass) {
       showAdminSections();
       loadEvents();
     } else {
       showLogin();
     }
+
+    if (window.Auth) Auth.init();
   }
 
   if (document.readyState === 'loading') {
