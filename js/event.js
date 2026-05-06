@@ -308,6 +308,65 @@
     }
   }
 
+  // ---------- tabs ----------
+
+  const TABS = ['submit', 'submitters', 'admin'];
+
+  function isInert(ev) {
+    return isFinalized(ev) || ev.locked || isExpired(ev);
+  }
+
+  function defaultTab() {
+    if (currentEvent && isInert(currentEvent)) return 'submitters';
+    return 'submit';
+  }
+
+  function activateTab(name, opts) {
+    if (!TABS.includes(name)) name = defaultTab();
+    if (name === 'admin' && !isAdmin()) name = defaultTab();
+    document.querySelectorAll('.event-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === name);
+    });
+    document.querySelectorAll('.event-panel').forEach(p => {
+      const isActive = p.id === 'panel-' + name;
+      p.classList.toggle('hidden', !isActive);
+      if (isActive) {
+        // restart entrance animation
+        p.style.animation = 'none';
+        void p.offsetWidth;
+        p.style.animation = '';
+      }
+    });
+    const newHash = '#' + name;
+    if ((!opts || !opts.fromHash) && window.location.hash !== newHash) {
+      history.replaceState(null, '', newHash);
+    }
+  }
+
+  function syncTabsForAdmin() {
+    const adminBtn = document.querySelector('.event-tab[data-tab="admin"]');
+    if (adminBtn) adminBtn.classList.toggle('hidden', !isAdmin());
+    const activeBtn = document.querySelector('.event-tab.active');
+    if (activeBtn && activeBtn.dataset.tab === 'admin' && !isAdmin()) {
+      activateTab(defaultTab());
+    }
+  }
+
+  function readHashTab() {
+    const h = (window.location.hash || '').replace('#', '').trim();
+    return TABS.includes(h) ? h : null;
+  }
+
+  function wireTabs() {
+    document.querySelectorAll('.event-tab').forEach(btn => {
+      btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+    });
+    window.addEventListener('hashchange', () => {
+      const h = readHashTab();
+      if (h) activateTab(h, { fromHash: true });
+    });
+  }
+
   // ---------- admin tools ----------
 
   function renderAdminTools(ev) {
@@ -499,7 +558,8 @@
     $('submit-section').classList.remove('hidden');
     applyAvailabilityToGrid(sub.availability);
     setStatus('', null);
-    $('submit-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    activateTab('submit');
+    $('panel-submit').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function cancelEdit() {
@@ -614,6 +674,10 @@
       renderAdminTools(ev);
       buildGrid(ev);
       showSubmitOrClosed(ev);
+      syncTabsForAdmin();
+      // Pick initial tab from hash, or fall back to default for the event state
+      const initialTab = readHashTab() || defaultTab();
+      activateTab(initialTab, { fromHash: !!readHashTab() });
 
       const nameInput = $('user-name');
       if (editingSubmissionId) {
@@ -635,6 +699,7 @@
 
     wireNamePrefill();
     wireSubmit();
+    wireTabs();
 
     $('cancel-edit').addEventListener('click', cancelEdit);
     $('save-final').addEventListener('click', onSaveFinal);
