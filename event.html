@@ -52,12 +52,12 @@
           No submissions yet. The comparison matrix, CSV export, and edit/delete tools will appear here once people start submitting their availability.
         </div>
         <div id="matrix-wrap">
-          <div class="scroll-x">
+          <p class="muted small" id="matrix-help">
+            Toggle "Mark final" on the slot(s) you want to lock in, then save below.
+          </p>
+          <div class="scroll-x scroll-x-matrix">
             <table id="comparison-matrix" class="matrix"></table>
           </div>
-          <p class="muted small" id="matrix-help">
-            Toggle "Mark final" on the slots you want to lock in, then save.
-          </p>
           <div class="form-actions matrix-actions">
             <button type="button" id="save-final" class="primary">Save as final time(s)</button>
             <button type="button" id="clear-final" class="ghost hidden">Clear final</button>
