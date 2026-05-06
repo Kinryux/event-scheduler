@@ -458,6 +458,34 @@ button.ghost:hover, .btn.ghost:hover { background: var(--surface-alt); }
 }
 .matrix tbody tr.final { background: var(--accent-soft); }
 
+/* Sticky left: slot label column */
+.matrix th.slot-col,
+.matrix td.slot-col {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 2;
+}
+.matrix thead th.slot-col { z-index: 3; background: var(--surface-alt); }
+.matrix tbody tr:nth-child(even) td.slot-col { background: var(--surface-alt); }
+.matrix tbody tr.final td.slot-col { background: var(--accent-soft); }
+
+/* Sticky right: total column */
+.matrix th.total-col,
+.matrix td.total {
+  position: sticky;
+  right: 0;
+  background: var(--surface);
+  z-index: 2;
+}
+.matrix thead th.total-col { z-index: 3; background: var(--surface-alt); }
+.matrix tbody tr:nth-child(even) td.total { background: var(--surface-alt); }
+.matrix td.total { border-left: 2px solid var(--border-strong); }
+.matrix th.total-col { border-left: 2px solid var(--border-strong); }
+
+/* Cap matrix scroll height for tall date×slot grids */
+.scroll-x-matrix { max-height: 70vh; overflow-y: auto; }
+
 /* ---------- submitter row admin actions ---------- */
 .submitter-name { font-weight: 500; }
 .submitter-right {
@@ -493,8 +521,23 @@ button.ghost:hover, .btn.ghost:hover { background: var(--surface-alt); }
   background: var(--accent-soft); color: var(--accent);
   border-radius: var(--radius-pill);
 }
-.sign-out-link { font-size: 13px; color: var(--text-muted); padding: 6px 8px; }
-.sign-out-link:hover { color: var(--text); text-decoration: none; background: var(--surface-alt); border-radius: var(--radius-sm); }
+.site-nav .signout-btn {
+  font-size: 13px;
+  padding: 4px 10px;
+  min-height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+.site-nav .signout-btn:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+  border-color: var(--border-strong);
+  text-decoration: none;
+}
 
 .auth-modal-backdrop, .modal-backdrop {
   position: fixed; inset: 0;

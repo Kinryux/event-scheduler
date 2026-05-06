@@ -85,7 +85,7 @@
 
     const out = document.createElement('a');
     out.href = '#';
-    out.className = 'sign-out-link';
+    out.className = 'signout-btn';
     out.textContent = 'Sign out';
     out.addEventListener('click', (e) => {
       e.preventDefault();
@@ -94,6 +94,14 @@
 
     nav.appendChild(pill);
     nav.appendChild(out);
+  }
+
+  function refreshNav() {
+    const nav = document.querySelector('.site-header-inner .site-nav');
+    if (!nav) return;
+    const adminLink = nav.querySelector('a[href="admin.html"]:not(.signout-btn)');
+    if (!adminLink) return;
+    adminLink.textContent = isAdmin() ? '+ New event' : 'Sign in (admin only)';
   }
 
   function startWatcher() {
@@ -217,6 +225,7 @@
   }
 
   function init() {
+    refreshNav();
     if (!isAdmin()) return;
     ensureActivity();
     renderBadge();
@@ -229,6 +238,7 @@
     getPass: getPass,
     signIn: signIn,
     signOut: signOut,
-    init: init
+    init: init,
+    refreshNav: refreshNav
   };
 })();
