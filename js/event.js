@@ -389,6 +389,7 @@
     }
 
     $('clear-final').classList.toggle('hidden', !isFinalized(ev));
+    $('save-final').disabled = finalSelections.length === 0;
   }
 
   function isInFinalSelections(combo) {
@@ -490,6 +491,7 @@
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
+    $('save-final').disabled = finalSelections.length === 0;
   }
 
   function onToggleFinal(combo) {

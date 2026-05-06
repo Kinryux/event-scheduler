@@ -434,7 +434,9 @@ button.ghost:hover, .btn.ghost:hover { background: var(--surface-alt); }
 
 /* ---------- comparison matrix ---------- */
 .matrix {
-  width: 100%;
+  width: auto;
+  min-width: 100%;
+  table-layout: auto;
   border-collapse: separate;
   border-spacing: 0;
   font-size: 13px;
@@ -446,7 +448,9 @@ button.ghost:hover, .btn.ghost:hover { background: var(--surface-alt); }
   border-bottom: 1px solid var(--border);
   border-right: 1px solid var(--border);
   vertical-align: middle;
+  white-space: nowrap;
 }
+.matrix .matrix-slot-label { white-space: normal; }
 .matrix th:last-child, .matrix td:last-child { border-right: none; }
 .matrix tbody tr:last-child td { border-bottom: none; }
 .matrix thead th {
@@ -483,33 +487,57 @@ button.ghost:hover, .btn.ghost:hover { background: var(--surface-alt); }
 }
 .matrix tbody tr.final { background: var(--accent-soft); }
 
-/* Sticky left: slot label column */
+/* Sticky left: slot label column — solid base + optional tint layered on top */
 .matrix th.slot-col,
 .matrix td.slot-col {
   position: sticky;
   left: 0;
   background: var(--surface);
   z-index: 2;
+  isolation: isolate;
 }
 .matrix thead th.slot-col { z-index: 3; background: var(--surface-alt); }
 .matrix tbody tr:nth-child(even) td.slot-col { background: var(--surface-alt); }
-.matrix tbody tr.final td.slot-col { background: var(--accent-soft); }
+.matrix tbody tr.final td.slot-col {
+  background:
+    linear-gradient(var(--accent-soft), var(--accent-soft)),
+    var(--surface);
+}
+.matrix tbody tr.final:nth-child(even) td.slot-col {
+  background:
+    linear-gradient(var(--accent-soft), var(--accent-soft)),
+    var(--surface-alt);
+}
 
-/* Sticky right: total column */
+/* Sticky right: total column. Inline backgroundColor from JS (heatmap)
+   wins over these solids on tbody .total cells. */
 .matrix th.total-col,
 .matrix td.total {
   position: sticky;
   right: 0;
   background: var(--surface);
   z-index: 2;
+  isolation: isolate;
 }
 .matrix thead th.total-col { z-index: 3; background: var(--surface-alt); }
 .matrix tbody tr:nth-child(even) td.total { background: var(--surface-alt); }
 .matrix td.total { border-left: 2px solid var(--border-strong); }
 .matrix th.total-col { border-left: 2px solid var(--border-strong); }
 
-/* Cap matrix scroll height for tall date×slot grids */
-.scroll-x-matrix { max-height: 70vh; overflow-y: auto; }
+/* Cap matrix scroll height + iOS momentum scrolling */
+.scroll-x-matrix {
+  max-height: 70vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile: tighter cells + capped slot/total widths */
+@media (max-width: 640px) {
+  .matrix th, .matrix td { padding: 8px 10px; font-size: 13px; }
+  .matrix .slot-col { min-width: 140px; max-width: 180px; }
+  .matrix th.total-col, .matrix td.total { min-width: 56px; }
+  .matrix-toggle { font-size: 10px; padding: 2px 8px; min-height: 22px; }
+}
 
 /* ---------- submitter row admin actions ---------- */
 .submitter-name { font-weight: 500; }
@@ -725,13 +753,12 @@ body.modal-open { overflow: hidden; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---------- scroll shadow on matrix ---------- */
+/* ---------- scroll shadow hint on matrix edges ---------- */
 .scroll-x-matrix {
   position: relative;
-}
-.scroll-x-matrix::after {
-  content: ''; position: sticky; top: 0; right: 0;
-  pointer-events: none;
+  background:
+    linear-gradient(to right, var(--surface), transparent 16px) left center / 16px 100% no-repeat,
+    linear-gradient(to left, var(--surface), transparent 16px) right center / 16px 100% no-repeat;
 }
 
 /* ---------- manage-row stagger ---------- */
