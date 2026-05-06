@@ -3,13 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Admin — Group Events</title>
+    <title>Admin — Event Scheduler</title>
     <link rel="stylesheet" href="css/styles.css" />
   </head>
   <body>
     <header class="site-header">
       <div class="site-header-inner">
-        <a class="brand" href="index.html">Group Events</a>
+        <a class="brand" href="index.html">Event Scheduler</a>
         <nav class="site-nav">
           <a href="index.html">Events</a>
           <a href="admin.html" class="active" aria-current="page">Admin</a>
@@ -43,44 +43,70 @@
           <h2>Create event</h2>
           <button id="logout-button" class="ghost" type="button">Sign out</button>
         </div>
-        <div id="create-status" class="banner"></div>
-        <form id="create-form">
-          <label>
-            <span class="label-text">Title</span>
-            <input type="text" id="create-title" required />
-          </label>
-          <label>
-            <span class="label-text">Description</span>
-            <textarea id="create-description" rows="3"></textarea>
-          </label>
-          <div>
-            <span class="label-text">Dates</span>
-            <div class="calendar" id="calendar">
-              <div class="calendar-header">
-                <button type="button" class="calendar-nav" id="cal-prev" aria-label="Previous month">‹</button>
-                <span class="calendar-title" id="cal-title"></span>
-                <button type="button" class="calendar-nav" id="cal-next" aria-label="Next month">›</button>
+        <div class="wizard">
+          <ol class="stepper" id="wizard-stepper">
+            <li class="step active" data-step="1"><span class="num"><span>1</span></span><span class="label">Basics</span></li>
+            <li class="step" data-step="2"><span class="num"><span>2</span></span><span class="label">Dates</span></li>
+            <li class="step" data-step="3"><span class="num"><span>3</span></span><span class="label">Times</span></li>
+          </ol>
+          <div id="create-status" class="banner"></div>
+          <form id="create-form">
+            <div class="wiz-step" data-step="1">
+              <h3>Step 1 of 3: The basics</h3>
+              <p class="step-desc">Give your event a clear title so people know what they're scheduling for.</p>
+              <label>
+                <span class="label-text">Title</span>
+                <input type="text" id="create-title" required />
+              </label>
+              <label>
+                <span class="label-text">Description</span>
+                <textarea id="create-description" rows="3"></textarea>
+              </label>
+              <div class="wiz-nav">
+                <span></span>
+                <button type="button" class="primary wiz-next" data-next="2">Next</button>
               </div>
-              <div class="calendar-weekdays">
-                <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+            </div>
+
+            <div class="wiz-step hidden" data-step="2">
+              <h3>Step 2 of 3: Pick dates</h3>
+              <p class="step-desc">Click any date to add it. Selected dates appear as chips below the calendar.</p>
+              <div class="calendar" id="calendar">
+                <div class="calendar-header">
+                  <button type="button" class="calendar-nav" id="cal-prev" aria-label="Previous month">‹</button>
+                  <span class="calendar-title" id="cal-title"></span>
+                  <button type="button" class="calendar-nav" id="cal-next" aria-label="Next month">›</button>
+                </div>
+                <div class="calendar-weekdays">
+                  <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                </div>
+                <div class="calendar-grid" id="cal-grid"></div>
               </div>
-              <div class="calendar-grid" id="cal-grid"></div>
+              <div id="date-chips" class="chips date-chips"></div>
+              <div class="wiz-nav">
+                <button type="button" class="ghost wiz-back">Back</button>
+                <button type="button" class="primary wiz-next" data-next="3">Next</button>
+              </div>
             </div>
-            <div id="date-chips" class="chips date-chips"></div>
-          </div>
-          <div>
-            <span class="label-text">Time slots</span>
-            <div class="row slot-input-row">
-              <input type="text" id="slot-input" placeholder="e.g. 9am–12pm" />
-              <button type="button" id="add-slot">Add</button>
+
+            <div class="wiz-step hidden" data-step="3">
+              <h3>Step 3 of 3: Time slots</h3>
+              <p class="step-desc">Add the slot labels — each one applies to every selected date.</p>
+              <div class="row slot-input-row">
+                <input type="text" id="slot-input" placeholder="e.g. 9am–12pm" />
+                <button type="button" id="add-slot">Add</button>
+              </div>
+              <div id="slot-chips" class="chips"></div>
+              <div class="wiz-nav">
+                <button type="button" class="ghost wiz-back">Back</button>
+                <button type="submit" class="primary">Create event</button>
+              </div>
             </div>
-            <div id="slot-chips" class="chips"></div>
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="primary">Create event</button>
-          </div>
-        </form>
+          </form>
+        </div>
       </section>
+
+      <hr class="section-separator" />
 
       <section id="manage-section" class="section hidden">
         <h2>Manage events</h2>
@@ -101,6 +127,7 @@
         <h2>Edit event</h2>
         <div id="edit-status" class="banner"></div>
         <form id="edit-form">
+          <p class="subsection-label">Basics</p>
           <label>
             <span class="label-text">Title</span>
             <input type="text" id="edit-title" required />
@@ -109,29 +136,25 @@
             <span class="label-text">Description</span>
             <textarea id="edit-description" rows="3"></textarea>
           </label>
-          <div>
-            <span class="label-text">Dates</span>
-            <div class="calendar" id="edit-calendar">
-              <div class="calendar-header">
-                <button type="button" class="calendar-nav" id="edit-cal-prev" aria-label="Previous month">‹</button>
-                <span class="calendar-title" id="edit-cal-title"></span>
-                <button type="button" class="calendar-nav" id="edit-cal-next" aria-label="Next month">›</button>
-              </div>
-              <div class="calendar-weekdays">
-                <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-              </div>
-              <div class="calendar-grid" id="edit-cal-grid"></div>
+          <p class="subsection-label">Dates</p>
+          <div class="calendar" id="edit-calendar">
+            <div class="calendar-header">
+              <button type="button" class="calendar-nav" id="edit-cal-prev" aria-label="Previous month">‹</button>
+              <span class="calendar-title" id="edit-cal-title"></span>
+              <button type="button" class="calendar-nav" id="edit-cal-next" aria-label="Next month">›</button>
             </div>
-            <div id="edit-date-chips" class="chips date-chips"></div>
-          </div>
-          <div>
-            <span class="label-text">Time slots</span>
-            <div class="row slot-input-row">
-              <input type="text" id="edit-slot-input" placeholder="e.g. 9am–12pm" />
-              <button type="button" id="edit-add-slot">Add</button>
+            <div class="calendar-weekdays">
+              <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
             </div>
-            <div id="edit-slot-chips" class="chips"></div>
+            <div class="calendar-grid" id="edit-cal-grid"></div>
           </div>
+          <div id="edit-date-chips" class="chips date-chips"></div>
+          <p class="subsection-label">Time slots</p>
+          <div class="row slot-input-row">
+            <input type="text" id="edit-slot-input" placeholder="e.g. 9am–12pm" />
+            <button type="button" id="edit-add-slot">Add</button>
+          </div>
+          <div id="edit-slot-chips" class="chips"></div>
           <div id="edit-removal-warning" class="banner banner-warning hidden"></div>
           <div class="form-actions">
             <button type="submit" class="primary">Save changes</button>

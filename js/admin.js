@@ -15,6 +15,10 @@
   let editViewMonth = 0;
   let editOriginal = null; // { dates: Set, slots: Set, submission_count }
 
+  // Wizard
+  let wizardStep = 1;
+  const WIZARD_TOTAL = 3;
+
   function $(id) { return document.getElementById(id); }
 
   function getStoredPass() {
@@ -242,9 +246,11 @@
       return String(aMin).localeCompare(String(bMin));
     });
 
-    for (const ev of sorted) {
-      container.appendChild(buildManageRow(ev, cachedActiveIds.has(ev.event_id)));
-    }
+    sorted.forEach((ev, i) => {
+      const row = buildManageRow(ev, cachedActiveIds.has(ev.event_id));
+      row.style.setProperty('--row-i', Math.min(i, 7));
+      container.appendChild(row);
+    });
   }
 
   function buildManageRow(ev, isActive) {
@@ -400,6 +406,7 @@
       renderChips();
       renderDateChips();
       buildCalendar();
+      resetWizard();
       setBanner(status, 'Event created.', 'ok');
       await loadEvents();
     } catch (err) {
@@ -434,6 +441,74 @@
   function onLogout() {
     if (window.Auth) Auth.signOut('manual');
     else { clearStoredPass(); pass = ''; location.reload(); }
+  }
+
+  // ---------- create wizard ----------
+
+  function validateStep(n) {
+    if (n === 1) {
+      const title = $('create-title').value.trim();
+      if (!title) return 'Title is required.';
+    } else if (n === 2) {
+      if (selectedDates.size === 0) return 'Select at least one date.';
+    } else if (n === 3) {
+      if (slots.length === 0) return 'Add at least one time slot.';
+    }
+    return '';
+  }
+
+  function updateStepper() {
+    document.querySelectorAll('#wizard-stepper .step').forEach(el => {
+      const s = parseInt(el.dataset.step, 10);
+      el.classList.remove('active', 'completed', 'future');
+      if (s < wizardStep) el.classList.add('completed');
+      else if (s === wizardStep) el.classList.add('active');
+      else el.classList.add('future');
+    });
+  }
+
+  function goToStep(n) {
+    if (n < 1 || n > WIZARD_TOTAL) return;
+    wizardStep = n;
+    document.querySelectorAll('.wiz-step').forEach(el => {
+      const s = parseInt(el.dataset.step, 10);
+      el.classList.toggle('hidden', s !== n);
+    });
+    updateStepper();
+    // Clear inline errors when moving steps
+    setBanner($('create-status'), '', null);
+  }
+
+  function onWizNext(targetStep) {
+    const err = validateStep(wizardStep);
+    if (err) { setBanner($('create-status'), err, 'error'); return; }
+    goToStep(targetStep);
+  }
+
+  function onStepperClick(e) {
+    const li = e.target.closest('.step');
+    if (!li) return;
+    const s = parseInt(li.dataset.step, 10);
+    if (s < wizardStep) goToStep(s); // back-only via stepper
+  }
+
+  function resetWizard() {
+    wizardStep = 1;
+    goToStep(1);
+  }
+
+  function wireWizard() {
+    document.querySelectorAll('.wiz-next').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = parseInt(btn.dataset.next, 10);
+        onWizNext(target);
+      });
+    });
+    document.querySelectorAll('.wiz-back').forEach(btn => {
+      btn.addEventListener('click', () => goToStep(wizardStep - 1));
+    });
+    $('wizard-stepper').addEventListener('click', onStepperClick);
+    updateStepper();
   }
 
   // ---------- edit-event modal ----------
@@ -704,6 +779,7 @@
     buildCalendar();
     renderDateChips();
 
+    wireWizard();
     wireEditModal();
     showSignedOutBanner();
 

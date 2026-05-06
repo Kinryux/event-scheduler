@@ -1,8 +1,9 @@
-# Event Availability
+# Event Scheduler
 
-A tiny static site for collecting date + time-slot availability from a small
-group. Admins create events with a date range and slot labels; anyone with the
-link can submit availability by name. Auto-expires after the last date.
+Find a time that works for everyone. A tiny static site for collecting date +
+time-slot availability from a small group. Admins create events with a list of
+dates and slot labels; anyone with the link can submit availability by name.
+Auto-expires after the last date.
 
 - Frontend: vanilla HTML/CSS/JS, hosted on GitHub Pages.
 - Backend: Google Apps Script web app bound to a Google Sheet.

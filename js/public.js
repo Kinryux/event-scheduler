@@ -83,9 +83,11 @@
       return;
     }
     emptyEl.classList.add('hidden');
-    for (const ev of events) {
-      container.appendChild(renderEventCard(ev));
-    }
+    events.forEach((ev, i) => {
+      const card = renderEventCard(ev);
+      card.style.setProperty('--card-i', Math.min(i, 5));
+      container.appendChild(card);
+    });
   }
 
   function switchTab(tab) {
