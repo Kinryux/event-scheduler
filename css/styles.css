@@ -556,6 +556,12 @@ button.ghost:hover, .btn.ghost:hover { background: var(--surface-alt); }
 .submitter-action:hover { background: var(--surface-alt); color: var(--text); }
 .submitter-action.danger { color: var(--danger); }
 .submitter-action.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+.submitter-action.ghost { color: var(--text); border-color: var(--border-strong); }
+.submitter-action.ghost:hover { background: var(--surface-alt); border-color: var(--accent); color: var(--accent); }
+.passcode-help code {
+  background: var(--surface-alt); padding: 1px 5px; border-radius: 4px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px;
+}
 
 /* ---------- editing banner ---------- */
 #editing-banner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

@@ -3,6 +3,9 @@
   let currentSubmissions = [];
   let adminPass = '';
   let editingSubmissionId = null;
+  let editingMode = null; // null | 'admin' | 'self'
+  let verifiedPasscode = ''; // captured after a successful self-edit unlock
+  let pendingPasscodeFor = null; // submission being unlocked
   let finalSelections = [];
 
   function $(id) { return document.getElementById(id); }
@@ -164,15 +167,28 @@
       count.textContent = totalSlots(s) + ' slots';
       right.appendChild(count);
 
+      // User-facing Edit (visible to everyone). Skips passcode prompt
+      // when the row has no stored passcode.
+      const userEditBtn = document.createElement('button');
+      userEditBtn.type = 'button';
+      userEditBtn.className = 'submitter-action ghost';
+      userEditBtn.textContent = s.has_passcode ? 'Edit' : 'Edit (no passcode)';
+      userEditBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onUserEditClick(s);
+      });
+      right.appendChild(userEditBtn);
+
       if (isAdmin()) {
-        const editBtn = document.createElement('button');
-        editBtn.type = 'button';
-        editBtn.className = 'submitter-action';
-        editBtn.textContent = 'Edit';
-        editBtn.addEventListener('click', (e) => {
+        const adminEditBtn = document.createElement('button');
+        adminEditBtn.type = 'button';
+        adminEditBtn.className = 'submitter-action';
+        adminEditBtn.textContent = 'Admin edit';
+        adminEditBtn.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          onEditSubmission(s);
+          onAdminEditSubmission(s);
         });
         const delBtn = document.createElement('button');
         delBtn.type = 'button';
@@ -183,8 +199,20 @@
           e.stopPropagation();
           onDeleteSubmission(s);
         });
-        right.appendChild(editBtn);
+        right.appendChild(adminEditBtn);
         right.appendChild(delBtn);
+        if (s.has_passcode) {
+          const clearBtn = document.createElement('button');
+          clearBtn.type = 'button';
+          clearBtn.className = 'submitter-action ghost';
+          clearBtn.textContent = 'Clear passcode';
+          clearBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onAdminClearPasscode(s);
+          });
+          right.appendChild(clearBtn);
+        }
       }
 
       summary.appendChild(name);
@@ -262,15 +290,6 @@
       const slots = availability[b.dataset.date];
       if (Array.isArray(slots) && slots.indexOf(b.dataset.slot) !== -1) b.checked = true;
     }
-  }
-
-  function findSubmissionByName(name) {
-    const target = String(name || '').trim().toLowerCase();
-    if (!target) return null;
-    for (const s of currentSubmissions) {
-      if (String(s.user_name || '').trim().toLowerCase() === target) return s;
-    }
-    return null;
   }
 
   function collectAvailability(ev) {
@@ -552,25 +571,138 @@
     }
   }
 
-  function onEditSubmission(sub) {
+  function enterEditMode(sub, mode, passcode) {
     editingSubmissionId = sub.submission_id;
+    editingMode = mode;
+    verifiedPasscode = mode === 'self' ? (passcode || '') : '';
     $('user-name').value = sub.user_name;
     $('editing-name').textContent = sub.user_name;
     $('editing-banner').classList.remove('hidden');
     $('submit-section').classList.remove('hidden');
     applyAvailabilityToGrid(sub.availability);
     setStatus('', null);
+    refreshFormMode();
     activateTab('submit');
     $('panel-submit').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  function onAdminEditSubmission(sub) {
+    enterEditMode(sub, 'admin');
+  }
+
+  function onUserEditClick(sub) {
+    if (!sub.has_passcode) {
+      enterEditMode(sub, 'self', '');
+      return;
+    }
+    pendingPasscodeFor = sub;
+    $('passcode-modal-prompt').textContent = "Enter the passcode for " + sub.user_name + "'s submission.";
+    $('passcode-modal-input').value = '';
+    setBannerEl($('passcode-modal-error'), '', null);
+    $('passcode-modal-backdrop').classList.remove('hidden');
+    document.body.classList.add('modal-open');
+    setTimeout(() => $('passcode-modal-input').focus(), 30);
+  }
+
+  function closePasscodeModal() {
+    $('passcode-modal-backdrop').classList.add('hidden');
+    document.body.classList.remove('modal-open');
+    pendingPasscodeFor = null;
+  }
+
+  async function onPasscodeSubmit(e) {
+    e.preventDefault();
+    if (!pendingPasscodeFor) return;
+    const code = $('passcode-modal-input').value.trim();
+    setBannerEl($('passcode-modal-error'), '', null);
+    if (!/^\d{4}$/.test(code)) {
+      setBannerEl($('passcode-modal-error'), 'Passcode must be 4 digits.', 'error');
+      return;
+    }
+    try {
+      const res = await API.verifyPasscode(pendingPasscodeFor.submission_id, code);
+      if (!res || res.ok !== true) {
+        setBannerEl($('passcode-modal-error'), (res && res.error) || 'Incorrect passcode', 'error');
+        return;
+      }
+      const sub = pendingPasscodeFor;
+      closePasscodeModal();
+      enterEditMode(sub, 'self', code);
+    } catch (err) {
+      setBannerEl($('passcode-modal-error'), err.message, 'error');
+    }
+  }
+
+  async function onAdminClearPasscode(sub) {
+    if (!confirm('Clear passcode for ' + sub.user_name + "? They'll be able to edit their submission without one.")) return;
+    showPageError('');
+    try {
+      const res = await API.updateSubmission(adminPass, sub.submission_id, sub.user_name, sub.availability || {}, '');
+      if (!res || res.ok !== true) {
+        throw new Error((res && res.error) || 'Failed to clear passcode');
+      }
+      await load();
+    } catch (err) {
+      showPageError(err.message);
+    }
+  }
+
+  function setBannerEl(el, msg, type) {
+    el.classList.remove('banner-error', 'banner-success', 'banner-warning', 'hidden');
+    el.textContent = msg || '';
+    if (!msg) { el.classList.add('hidden'); return; }
+    if (type === 'error') el.classList.add('banner-error');
+    else if (type === 'ok') el.classList.add('banner-success');
+    else el.classList.add('banner-warning');
+  }
+
   function cancelEdit() {
     editingSubmissionId = null;
+    editingMode = null;
+    verifiedPasscode = '';
     $('editing-banner').classList.add('hidden');
     $('user-name').value = '';
+    $('user-passcode').value = '';
+    $('admin-passcode-set').value = '';
     clearGridChecks();
     setStatus('', null);
+    refreshFormMode();
     if (currentEvent) showSubmitOrClosed(currentEvent);
+  }
+
+  function refreshFormMode() {
+    const passField = $('passcode-field');
+    const adminPassField = $('admin-passcode-field');
+    const submitBtn = $('submit-button');
+    if (editingMode === 'admin') {
+      passField.classList.add('hidden');
+      adminPassField.classList.remove('hidden');
+      submitBtn.textContent = 'Save changes';
+    } else if (editingMode === 'self') {
+      passField.classList.add('hidden');
+      adminPassField.classList.add('hidden');
+      submitBtn.textContent = 'Save changes';
+    } else {
+      passField.classList.remove('hidden');
+      adminPassField.classList.add('hidden');
+      submitBtn.textContent = 'Submit availability';
+    }
+    refreshSubmitEnabled();
+  }
+
+  function refreshSubmitEnabled() {
+    const name = $('user-name').value.trim();
+    const submitBtn = $('submit-button');
+    if (editingMode === 'admin') {
+      const adminCode = $('admin-passcode-set').value;
+      const codeOk = adminCode === '' || /^\d{4}$/.test(adminCode);
+      submitBtn.disabled = !name || !codeOk;
+    } else if (editingMode === 'self') {
+      submitBtn.disabled = !name;
+    } else {
+      const code = $('user-passcode').value;
+      submitBtn.disabled = !name || !/^\d{4}$/.test(code);
+    }
   }
 
   function exportCSV() {
@@ -606,20 +738,25 @@
 
   // ---------- form wiring ----------
 
-  function wireNamePrefill() {
-    const input = $('user-name');
-    const handler = () => {
-      if (editingSubmissionId) return; // don't override admin edit state
-      const match = findSubmissionByName(input.value);
-      if (match) {
-        applyAvailabilityToGrid(match.availability);
-        setStatus('Loaded existing picks for "' + match.user_name + '". Submitting will update them.', 'ok');
-      } else {
-        setStatus('', null);
+  function wireFormInputs() {
+    ['user-name', 'user-passcode', 'admin-passcode-set'].forEach(id => {
+      const el = $(id);
+      if (el) el.addEventListener('input', refreshSubmitEnabled);
+    });
+  }
+
+  function wirePasscodeModal() {
+    $('passcode-form').addEventListener('submit', onPasscodeSubmit);
+    $('passcode-modal-close').addEventListener('click', closePasscodeModal);
+    $('passcode-modal-cancel').addEventListener('click', closePasscodeModal);
+    $('passcode-modal-backdrop').addEventListener('click', (e) => {
+      if (e.target === $('passcode-modal-backdrop')) closePasscodeModal();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !$('passcode-modal-backdrop').classList.contains('hidden')) {
+        closePasscodeModal();
       }
-    };
-    input.addEventListener('blur', handler);
-    input.addEventListener('change', handler);
+    });
   }
 
   function wireSubmit() {
@@ -633,28 +770,43 @@
         return;
       }
       const availability = collectAvailability(currentEvent);
-      const button = form.querySelector('button[type="submit"]');
+      const button = $('submit-button');
       button.disabled = true;
       setStatus('Submitting…', null);
       try {
         let res;
-        if (editingSubmissionId && isAdmin()) {
-          res = await API.updateSubmission(adminPass, editingSubmissionId, availability);
+        if (editingMode === 'admin') {
+          const newCode = $('admin-passcode-set').value.trim();
+          const passcodeArg = newCode === '' ? undefined : newCode;
+          res = await API.updateSubmission(adminPass, editingSubmissionId, name, availability, passcodeArg);
+        } else if (editingMode === 'self') {
+          res = await API.editSubmissionAsUser(currentEvent.event_id, editingSubmissionId, verifiedPasscode, name, availability);
         } else {
-          res = await API.submitAvailability(currentEvent.event_id, name, availability);
+          const code = $('user-passcode').value.trim();
+          if (!/^\d{4}$/.test(code)) {
+            setStatus('Passcode must be exactly 4 digits.', 'error');
+            button.disabled = false;
+            return;
+          }
+          res = await API.submitAvailability(currentEvent.event_id, name, availability, code);
         }
         if (!res || res.ok !== true) {
           throw new Error((res && res.error) || 'Submission failed');
         }
-        setStatus('Submitted. Thanks!', 'ok');
+        setStatus(editingMode ? 'Saved.' : 'Submitted. Thanks!', 'ok');
         editingSubmissionId = null;
+        editingMode = null;
+        verifiedPasscode = '';
         $('editing-banner').classList.add('hidden');
+        $('user-passcode').value = '';
+        $('admin-passcode-set').value = '';
         await load();
       } catch (err) {
         setStatus('Could not submit: ' + err.message, 'error');
-      } finally {
         button.disabled = false;
+        return;
       }
+      refreshFormMode();
     });
   }
 
@@ -681,15 +833,12 @@
       const initialTab = readHashTab() || defaultTab();
       activateTab(initialTab, { fromHash: !!readHashTab() });
 
-      const nameInput = $('user-name');
       if (editingSubmissionId) {
         const match = currentSubmissions.find(s => s.submission_id === editingSubmissionId);
         if (match) applyAvailabilityToGrid(match.availability);
         else cancelEdit();
-      } else if (nameInput && nameInput.value) {
-        const match = findSubmissionByName(nameInput.value);
-        if (match) applyAvailabilityToGrid(match.availability);
       }
+      refreshFormMode();
     } catch (err) {
       showPageError('Could not load event: ' + err.message);
     }
@@ -699,9 +848,11 @@
     if (window.Auth) Auth.init();
     adminPass = getStoredAdminPass();
 
-    wireNamePrefill();
+    wireFormInputs();
+    wirePasscodeModal();
     wireSubmit();
     wireTabs();
+    refreshFormMode();
 
     $('cancel-edit').addEventListener('click', cancelEdit);
     $('save-final').addEventListener('click', onSaveFinal);

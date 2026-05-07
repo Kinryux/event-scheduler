@@ -59,11 +59,29 @@
               <span class="label-text">Your name</span>
               <input type="text" id="user-name" autocomplete="name" required />
             </label>
+            <div id="passcode-field">
+              <label>
+                <span class="label-text">Passcode</span>
+                <input type="text" id="user-passcode" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" required />
+              </label>
+              <p class="muted small passcode-help">
+                Set a 4-digit passcode you'll remember — your birth month and day works well, e.g., <code>0427</code> for April 27. You'll need it to revise this submission later.
+              </p>
+            </div>
+            <div id="admin-passcode-field" class="hidden">
+              <label>
+                <span class="label-text">Passcode (admin)</span>
+                <input type="text" id="admin-passcode-set" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" />
+              </label>
+              <p class="muted small">
+                Leave empty to keep the current passcode unchanged. Type 4 digits to set a new one.
+              </p>
+            </div>
             <div class="scroll-x">
               <table id="availability-grid" class="availability-grid"></table>
             </div>
             <div class="form-actions">
-              <button type="submit" class="primary">Submit availability</button>
+              <button type="submit" id="submit-button" class="primary" disabled>Submit availability</button>
             </div>
           </form>
         </div>
@@ -108,6 +126,25 @@
         <a href="index.html">All events</a>
       </div>
     </footer>
+
+    <div id="passcode-modal-backdrop" class="modal-backdrop hidden">
+      <div class="modal" role="dialog" aria-label="Enter passcode">
+        <button type="button" class="modal-close" id="passcode-modal-close" aria-label="Close">×</button>
+        <h2>Enter passcode</h2>
+        <p class="muted small" id="passcode-modal-prompt"></p>
+        <form id="passcode-form">
+          <label>
+            <span class="label-text">Passcode</span>
+            <input type="text" id="passcode-modal-input" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" required />
+          </label>
+          <div id="passcode-modal-error" class="banner banner-error hidden"></div>
+          <div class="form-actions">
+            <button type="submit" class="primary">Unlock</button>
+            <button type="button" class="ghost" id="passcode-modal-cancel">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <script src="js/config.js"></script>
     <script src="js/api.js"></script>

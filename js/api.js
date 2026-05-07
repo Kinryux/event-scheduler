@@ -28,11 +28,12 @@
     createEvent: function (adminPass, payload) {
       return post('createEvent', Object.assign({ adminPass: adminPass }, payload || {}));
     },
-    submitAvailability: function (eventId, userName, availability) {
+    submitAvailability: function (eventId, userName, availability, passcode) {
       return post('submitAvailability', {
         event_id: eventId,
         user_name: userName,
-        availability: availability
+        availability: availability,
+        passcode: passcode == null ? '' : passcode
       });
     },
     lockEvent: function (adminPass, eventId, locked) {
@@ -54,11 +55,29 @@
         event_id: eventId
       }, payload || {}));
     },
-    updateSubmission: function (adminPass, submissionId, availability) {
-      return post('updateSubmission', {
+    updateSubmission: function (adminPass, submissionId, userName, availability, passcode) {
+      const body = {
         adminPass: adminPass,
         submission_id: submissionId,
+        user_name: userName,
         availability: availability
+      };
+      if (passcode !== undefined) body.passcode = passcode;
+      return post('updateSubmission', body);
+    },
+    editSubmissionAsUser: function (eventId, submissionId, passcode, userName, availability) {
+      return post('editSubmissionAsUser', {
+        event_id: eventId,
+        submission_id: submissionId,
+        passcode: passcode == null ? '' : passcode,
+        user_name: userName,
+        availability: availability
+      });
+    },
+    verifyPasscode: function (submissionId, passcode) {
+      return post('verifyPasscode', {
+        submission_id: submissionId,
+        passcode: passcode == null ? '' : passcode
       });
     },
     deleteSubmission: function (adminPass, submissionId) {
