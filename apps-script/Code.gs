@@ -27,7 +27,8 @@ const SUBMISSIONS_HEADERS = [
   'event_id',
   'user_name',
   'availability',
-  'submitted_at'
+  'submitted_at',
+  'passcode'
 ];
 
 function ensureSheets_() {
@@ -38,15 +39,24 @@ function ensureSheets_() {
 
 function ensureSheetWithHeaders_(ss, name, headers) {
   let sheet = ss.getSheetByName(name);
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-  }
-  const firstRow = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
-  const needsHeaders = headers.some((h, i) => firstRow[i] !== h);
-  if (needsHeaders) {
+  if (!sheet) sheet = ss.insertSheet(name);
+  const lastCol = sheet.getLastColumn();
+  if (lastCol === 0) {
     sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
     sheet.setFrozenRows(1);
+    return;
   }
+  const existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  const have = {};
+  existing.forEach(function (h) { have[String(h)] = true; });
+  const missing = [];
+  for (let i = 0; i < headers.length; i++) {
+    if (!have[headers[i]]) missing.push(headers[i]);
+  }
+  if (missing.length > 0) {
+    sheet.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]);
+  }
+  sheet.setFrozenRows(1);
 }
 
 function jsonResponse_(payload) {
@@ -190,6 +200,7 @@ function getSubmissionsForEvent_(eventId) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
   const values = sheet.getRange(2, 1, lastRow - 1, SUBMISSIONS_HEADERS.length).getValues();
+  const passcodeIdx = SUBMISSIONS_HEADERS.indexOf('passcode');
   const out = [];
   for (let i = 0; i < values.length; i++) {
     const row = values[i];
@@ -200,7 +211,8 @@ function getSubmissionsForEvent_(eventId) {
         event_id: String(row[1]),
         user_name: row[2],
         availability: parseAvailability_(row[3]),
-        submitted_at: row[4]
+        submitted_at: row[4],
+        passcode: passcodeIdx >= 0 ? String(row[passcodeIdx] || '') : ''
       });
     }
   }
@@ -282,6 +294,12 @@ function doPost(e) {
       return jsonResponse_(safeAdmin_(function () { return handleDeleteSubmission_(body); }));
     case 'setFinalSlots':
       return jsonResponse_(safeAdmin_(function () { return handleSetFinalSlots_(body); }));
+    case 'verifyPasscode':
+      try { return jsonResponse_(handleVerifyPasscode_(body)); }
+      catch (err) { return jsonResponse_({ ok: false, error: err.message }); }
+    case 'editSubmissionAsUser':
+      try { return jsonResponse_(handleEditSubmissionAsUser_(body)); }
+      catch (err) { return jsonResponse_({ ok: false, error: err.message }); }
     default:
       return jsonResponse_({ ok: false, error: 'Unknown action' });
   }
@@ -326,7 +344,8 @@ function handleGetEvent_(eventId) {
       event_id: s.event_id,
       user_name: s.user_name,
       availability: s.availability,
-      submitted_at: s.submitted_at
+      submitted_at: s.submitted_at,
+      has_passcode: !!s.passcode
     };
   });
   const serialized = serializeEvent_(found.event, submissions.length);
@@ -372,22 +391,17 @@ function handleSubmitAvailability_(body) {
   const eventId = body.event_id;
   const userName = body.user_name;
   const availability = body.availability;
+  const passcode = body.passcode == null ? '' : String(body.passcode);
   if (!eventId || !userName || availability == null || typeof availability !== 'object') {
     return { ok: false, error: 'Missing required fields' };
   }
   const found = findEventById_(eventId);
-  if (!found.event) {
-    return { ok: false, error: 'Event not found' };
-  }
+  if (!found.event) return { ok: false, error: 'Event not found' };
   if (found.event.final_slots && found.event.final_slots.length > 0) {
     return { ok: false, error: 'Event is finalized — no further submissions' };
   }
-  if (found.event.locked) {
-    return { ok: false, error: 'Event is locked' };
-  }
-  if (isExpired_(found.event.dates)) {
-    return { ok: false, error: 'Event has expired' };
-  }
+  if (found.event.locked) return { ok: false, error: 'Event is locked' };
+  if (isExpired_(found.event.dates)) return { ok: false, error: 'Event has expired' };
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -396,36 +410,22 @@ function handleSubmitAvailability_(body) {
     const sheet = ss.getSheetByName(SUBMISSIONS_SHEET);
     const lastRow = sheet.getLastRow();
     const targetName = normalizeName_(userName);
-    let updateRow = -1;
-    let existingId = null;
     if (lastRow >= 2) {
       const values = sheet.getRange(2, 1, lastRow - 1, SUBMISSIONS_HEADERS.length).getValues();
       for (let i = 0; i < values.length; i++) {
         if (String(values[i][1]) === eventId && normalizeName_(values[i][2]) === targetName) {
-          updateRow = i + 2;
-          existingId = String(values[i][0]);
-          break;
+          return { ok: false, error: 'A submission with that name already exists. To edit it, go to the Submitters tab.' };
         }
       }
     }
-    const submittedAt = new Date().toISOString();
-    if (updateRow > 0) {
-      sheet.getRange(updateRow, 1, 1, SUBMISSIONS_HEADERS.length).setValues([[
-        existingId,
-        eventId,
-        String(userName).trim(),
-        JSON.stringify(availability),
-        submittedAt
-      ]]);
-    } else {
-      sheet.appendRow([
-        Utilities.getUuid(),
-        eventId,
-        String(userName).trim(),
-        JSON.stringify(availability),
-        submittedAt
-      ]);
-    }
+    sheet.appendRow([
+      Utilities.getUuid(),
+      eventId,
+      String(userName).trim(),
+      JSON.stringify(availability),
+      new Date().toISOString(),
+      passcode
+    ]);
   } finally {
     lock.releaseLock();
   }
@@ -522,10 +522,16 @@ function handleLockEvent_(body) {
 function handleUpdateSubmission_(body) {
   requireAdmin_(body.adminPass);
   const submissionId = body.submission_id;
+  const userName = body.user_name;
   const availability = body.availability;
-  if (!submissionId || availability == null || typeof availability !== 'object') {
-    throw new Error('Missing required fields');
+  const passcodeProvided = Object.prototype.hasOwnProperty.call(body, 'passcode');
+  const newPasscode = passcodeProvided ? String(body.passcode == null ? '' : body.passcode) : null;
+
+  if (!submissionId) throw new Error('Missing submission_id');
+  if (availability == null || typeof availability !== 'object') {
+    throw new Error('Missing availability');
   }
+
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
@@ -539,10 +545,20 @@ function handleUpdateSubmission_(body) {
       if (String(values[i][0]) === submissionId) { rowIndex = i + 2; break; }
     }
     if (rowIndex < 0) throw new Error('Submission not found');
+
+    const nameCol = SUBMISSIONS_HEADERS.indexOf('user_name') + 1;
     const availCol = SUBMISSIONS_HEADERS.indexOf('availability') + 1;
     const submittedCol = SUBMISSIONS_HEADERS.indexOf('submitted_at') + 1;
+    const passcodeCol = SUBMISSIONS_HEADERS.indexOf('passcode') + 1;
+
+    if (userName != null && String(userName).trim() !== '') {
+      sheet.getRange(rowIndex, nameCol).setValue(String(userName).trim());
+    }
     sheet.getRange(rowIndex, availCol).setValue(JSON.stringify(availability));
     sheet.getRange(rowIndex, submittedCol).setValue(new Date().toISOString());
+    if (passcodeProvided && passcodeCol > 0) {
+      sheet.getRange(rowIndex, passcodeCol).setValue(newPasscode);
+    }
   } finally {
     lock.releaseLock();
   }
@@ -593,6 +609,79 @@ function handleSetFinalSlots_(body) {
     if (!found.event) throw new Error('Event not found');
     const colIndex = EVENTS_HEADERS.indexOf('final_slots') + 1;
     found.sheet.getRange(found.event.rowIndex, colIndex).setValue(JSON.stringify(finalSlots));
+  } finally {
+    lock.releaseLock();
+  }
+  return { ok: true };
+}
+
+function handleVerifyPasscode_(body) {
+  const submissionId = body.submission_id;
+  const passcode = body.passcode == null ? '' : String(body.passcode);
+  if (!submissionId) return { ok: false, error: 'Missing submission_id' };
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  const sheet = ss.getSheetByName(SUBMISSIONS_SHEET);
+  if (!sheet) return { ok: false, error: 'Submission not found' };
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { ok: false, error: 'Submission not found' };
+  const values = sheet.getRange(2, 1, lastRow - 1, SUBMISSIONS_HEADERS.length).getValues();
+  const passcodeIdx = SUBMISSIONS_HEADERS.indexOf('passcode');
+  for (let i = 0; i < values.length; i++) {
+    if (String(values[i][0]) === submissionId) {
+      const stored = passcodeIdx >= 0 ? String(values[i][passcodeIdx] || '') : '';
+      if (stored === '' || stored === passcode) return { ok: true };
+      return { ok: false, error: 'Incorrect passcode' };
+    }
+  }
+  return { ok: false, error: 'Submission not found' };
+}
+
+function handleEditSubmissionAsUser_(body) {
+  const eventId = body.event_id;
+  const submissionId = body.submission_id;
+  const passcode = body.passcode == null ? '' : String(body.passcode);
+  const userName = body.user_name;
+  const availability = body.availability;
+  if (!submissionId || !userName || availability == null || typeof availability !== 'object') {
+    return { ok: false, error: 'Missing required fields' };
+  }
+  if (eventId) {
+    const found = findEventById_(eventId);
+    if (!found.event) return { ok: false, error: 'Event not found' };
+    if (found.event.final_slots && found.event.final_slots.length > 0) {
+      return { ok: false, error: 'Event is finalized — no further submissions' };
+    }
+    if (found.event.locked) return { ok: false, error: 'Event is locked' };
+    if (isExpired_(found.event.dates)) return { ok: false, error: 'Event has expired' };
+  }
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    const sheet = ss.getSheetByName(SUBMISSIONS_SHEET);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return { ok: false, error: 'Submission not found' };
+    const values = sheet.getRange(2, 1, lastRow - 1, SUBMISSIONS_HEADERS.length).getValues();
+    const passcodeIdx = SUBMISSIONS_HEADERS.indexOf('passcode');
+    let rowIndex = -1;
+    let stored = '';
+    for (let i = 0; i < values.length; i++) {
+      if (String(values[i][0]) === submissionId) {
+        rowIndex = i + 2;
+        stored = passcodeIdx >= 0 ? String(values[i][passcodeIdx] || '') : '';
+        break;
+      }
+    }
+    if (rowIndex < 0) return { ok: false, error: 'Submission not found' };
+    if (stored !== '' && stored !== passcode) {
+      return { ok: false, error: 'Incorrect passcode' };
+    }
+    const nameCol = SUBMISSIONS_HEADERS.indexOf('user_name') + 1;
+    const availCol = SUBMISSIONS_HEADERS.indexOf('availability') + 1;
+    const submittedCol = SUBMISSIONS_HEADERS.indexOf('submitted_at') + 1;
+    sheet.getRange(rowIndex, nameCol).setValue(String(userName).trim());
+    sheet.getRange(rowIndex, availCol).setValue(JSON.stringify(availability));
+    sheet.getRange(rowIndex, submittedCol).setValue(new Date().toISOString());
   } finally {
     lock.releaseLock();
   }

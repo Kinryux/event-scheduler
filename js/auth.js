@@ -100,8 +100,30 @@
     const nav = document.querySelector('.site-header-inner .site-nav');
     if (!nav) return;
     const adminLink = nav.querySelector('a[href="admin.html"]:not(.signout-btn)');
-    if (!adminLink) return;
-    adminLink.textContent = isAdmin() ? '+ New event' : 'Sign in (admin only)';
+    if (adminLink) {
+      adminLink.textContent = isAdmin() ? '+ New event' : 'Sign in (admin only)';
+    }
+    let manageLink = nav.querySelector('a[href="manage.html"]');
+    if (isAdmin()) {
+      if (!manageLink) {
+        manageLink = document.createElement('a');
+        manageLink.href = 'manage.html';
+        manageLink.textContent = 'Manage';
+        manageLink.className = 'admin-injected';
+        const badge = nav.querySelector('.admin-badge');
+        const signout = nav.querySelector('.signout-btn');
+        if (badge) nav.insertBefore(manageLink, badge);
+        else if (signout) nav.insertBefore(manageLink, signout);
+        else nav.appendChild(manageLink);
+      }
+      // Mark active when on manage.html
+      if (window.location.pathname.endsWith('manage.html')) {
+        manageLink.setAttribute('aria-current', 'page');
+        manageLink.classList.add('active');
+      }
+    } else if (manageLink) {
+      manageLink.remove();
+    }
   }
 
   function startWatcher() {
