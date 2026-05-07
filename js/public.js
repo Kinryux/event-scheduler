@@ -44,6 +44,7 @@
     a.className = 'event-card';
     a.href = 'event.html?id=' + encodeURIComponent(ev.event_id);
 
+    // Title + badges row
     const titleRow = document.createElement('div');
     titleRow.className = 'title';
 
@@ -66,12 +67,50 @@
 
     a.appendChild(titleRow);
 
+    // Date range meta
     const meta = document.createElement('div');
     meta.className = 'meta';
     const range = formatDatesList(ev.dates || []);
-    const count = pluralize(ev.submission_count || 0, 'submission');
-    meta.textContent = (range ? range + ' · ' : '') + count;
+    meta.textContent = range || '';
     a.appendChild(meta);
+
+    // Mini heatmap grid — intensity driven by submission_count
+    const dates = ev.dates || [];
+    if (dates.length > 0) {
+      const heatmap = document.createElement('div');
+      heatmap.className = 'heatmap-mini';
+      heatmap.style.gridTemplateColumns = 'repeat(' + dates.length + ', 1fr)';
+      heatmap.style.gridTemplateRows = 'repeat(4, 14px)';
+
+      const baseIntensity = Math.min((ev.submission_count || 0) / 8, 0.92);
+      const totalCells = dates.length * 4;
+      for (let i = 0; i < totalCells; i++) {
+        const di = Math.floor(i / 4);
+        const si = i % 4;
+        // Deterministic variation — looks organic without fabricating slot data
+        const variation = ((di * 3 + si * 7) % 9) / 40;
+        const v = Math.max(0, Math.min(1, baseIntensity + variation - 0.1));
+        const pct = Math.round(6 + v * 50);
+        const cell = document.createElement('div');
+        cell.style.background = ev.submission_count > 0
+          ? 'color-mix(in oklab, var(--accent) ' + pct + '%, var(--surface))'
+          : 'var(--surface-alt)';
+        heatmap.appendChild(cell);
+      }
+      a.appendChild(heatmap);
+    }
+
+    // Footer row: submission count + open arrow
+    const footer = document.createElement('div');
+    footer.className = 'footer-row';
+    const countEl = document.createElement('span');
+    countEl.textContent = pluralize(ev.submission_count || 0, 'submission');
+    const openEl = document.createElement('span');
+    openEl.className = 'open-arrow';
+    openEl.textContent = 'Open →';
+    footer.appendChild(countEl);
+    footer.appendChild(openEl);
+    a.appendChild(footer);
 
     return a;
   }
