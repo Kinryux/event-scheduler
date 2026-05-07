@@ -241,34 +241,89 @@
     table.innerHTML = '';
     const slots = ev.time_slots || [];
     const dates = sortedDates(ev);
+    const totalSubs = currentSubmissions.length;
 
+    // Pre-compute group count per (date, slot)
+    const groupCount = {};
+    for (const d of dates) {
+      groupCount[d] = {};
+      for (const s of slots) {
+        groupCount[d][s] = currentSubmissions.filter(function (sub) {
+          return sub.availability && Array.isArray(sub.availability[d]) &&
+            sub.availability[d].indexOf(s) !== -1;
+        }).length;
+      }
+    }
+
+    // Header row: corner + one column per date
     const thead = document.createElement('thead');
     const headRow = document.createElement('tr');
     const corner = document.createElement('th');
-    corner.textContent = 'Date';
+    corner.className = 'slot-col';
     headRow.appendChild(corner);
-    for (const slot of slots) {
+    for (const d of dates) {
       const th = document.createElement('th');
-      th.textContent = slot;
+      th.className = 'day-col';
+      const dt = new Date(d + 'T00:00:00Z');
+      const dayNumTxt = dt.toLocaleDateString(undefined, { day: 'numeric', timeZone: 'UTC' });
+      const weekday = dt.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' });
+      const month = dt.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' });
+      const big = document.createElement('span');
+      big.className = 'head-day';
+      big.textContent = dayNumTxt;
+      const sub = document.createElement('span');
+      sub.className = 'head-month';
+      sub.textContent = weekday + ' · ' + month;
+      th.appendChild(big);
+      th.appendChild(sub);
       headRow.appendChild(th);
     }
     thead.appendChild(headRow);
     table.appendChild(thead);
 
+    // Body: one row per slot, one cell per date
     const tbody = document.createElement('tbody');
-    for (const d of dates) {
+    for (const slot of slots) {
       const row = document.createElement('tr');
-      const dateCell = document.createElement('td');
-      dateCell.textContent = formatDateLong(d);
-      row.appendChild(dateCell);
-      for (const slot of slots) {
+      const slotCell = document.createElement('td');
+      slotCell.className = 'slot-col';
+      const labelDiv = document.createElement('div');
+      labelDiv.className = 'matrix-slot-label';
+      const slotSpan = document.createElement('span');
+      slotSpan.className = 'matrix-slot';
+      slotSpan.textContent = slot;
+      labelDiv.appendChild(slotSpan);
+      slotCell.appendChild(labelDiv);
+      row.appendChild(slotCell);
+
+      for (const d of dates) {
         const td = document.createElement('td');
         const label = document.createElement('label');
+
+        // Heat background from group availability
+        if (totalSubs > 0) {
+          const n = groupCount[d][slot];
+          const intensity = n / totalSubs;
+          const heatPct = Math.round(6 + intensity * 50);
+          label.style.background =
+            'color-mix(in oklab, var(--accent) ' + heatPct + '%, var(--surface-alt))';
+        }
+
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.dataset.date = d;
         cb.dataset.slot = slot;
         label.appendChild(cb);
+
+        // Count badge showing group availability
+        if (totalSubs > 0) {
+          const n = groupCount[d][slot];
+          const badge = document.createElement('span');
+          badge.className = 'heat-badge';
+          badge.textContent = n + '/' + totalSubs;
+          label.appendChild(badge);
+        }
+
         td.appendChild(label);
         row.appendChild(td);
       }
@@ -425,92 +480,178 @@
 
     const dates = sortedDates(ev);
     const slots = ev.time_slots || [];
-    const combos = [];
-    for (const d of dates) {
-      for (const s of slots) {
-        let total = 0;
-        const picks = sortedSubs.map(sub => {
-          const has = sub.availability && Array.isArray(sub.availability[d]) &&
-            sub.availability[d].indexOf(s) !== -1;
-          if (has) total++;
-          return !!has;
-        });
-        combos.push({ date: d, slot: s, picks: picks, total: total });
+    const totalSubs = sortedSubs.length;
+
+    const cellCount = (d, s) => {
+      let n = 0;
+      for (const sub of sortedSubs) {
+        if (sub.availability && Array.isArray(sub.availability[d]) &&
+            sub.availability[d].indexOf(s) !== -1) n++;
       }
+      return n;
+    };
+    let bestN = 0;
+    for (const d of dates) for (const s of slots) {
+      const n = cellCount(d, s);
+      if (n > bestN) bestN = n;
     }
-    combos.sort((a, b) => b.total - a.total);
+
+    renderConsensusBanner(ev, dates, slots, sortedSubs, cellCount, bestN);
 
     const thead = document.createElement('thead');
     const headRow = document.createElement('tr');
-    const slotHeader = document.createElement('th');
-    slotHeader.textContent = 'Slot';
-    slotHeader.className = 'slot-col';
-    headRow.appendChild(slotHeader);
-    for (const sub of sortedSubs) {
+    const corner = document.createElement('th');
+    corner.className = 'slot-col';
+    corner.innerHTML = '<span class="muted small">Slot</span>';
+    headRow.appendChild(corner);
+    for (const d of dates) {
       const th = document.createElement('th');
-      th.textContent = sub.user_name;
+      th.className = 'day-col';
+      const dt = new Date(d + 'T00:00:00Z');
+      const dayNum = dt.toLocaleDateString(undefined, { day: 'numeric', timeZone: 'UTC' });
+      const weekday = dt.toLocaleDateString(undefined, { weekday: 'short', timeZone: 'UTC' });
+      const month = dt.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' });
+      const big = document.createElement('span');
+      big.className = 'head-day';
+      big.textContent = dayNum;
+      const sub = document.createElement('span');
+      sub.className = 'head-month';
+      sub.textContent = weekday + ' · ' + month;
+      th.appendChild(big);
+      th.appendChild(sub);
       headRow.appendChild(th);
     }
-    const totalHeader = document.createElement('th');
-    totalHeader.textContent = 'Total';
-    totalHeader.className = 'total-col';
-    headRow.appendChild(totalHeader);
     thead.appendChild(headRow);
     table.appendChild(thead);
 
     const tbody = document.createElement('tbody');
-    const totalSubs = sortedSubs.length;
-    for (const combo of combos) {
+    for (const slot of slots) {
       const tr = document.createElement('tr');
-      const isFinal = isInFinalSelections(combo);
-      if (isFinal) tr.classList.add('final');
 
       const slotCell = document.createElement('td');
       slotCell.className = 'slot-col';
-
       const labelDiv = document.createElement('div');
       labelDiv.className = 'matrix-slot-label';
-      const dateSpan = document.createElement('span');
-      dateSpan.className = 'matrix-date';
-      dateSpan.textContent = formatDateLong(combo.date);
       const slotSpan = document.createElement('span');
       slotSpan.className = 'matrix-slot';
-      slotSpan.textContent = combo.slot;
-      labelDiv.appendChild(dateSpan);
+      slotSpan.textContent = slot;
       labelDiv.appendChild(slotSpan);
       slotCell.appendChild(labelDiv);
-
-      const toggle = document.createElement('button');
-      toggle.type = 'button';
-      toggle.className = 'matrix-toggle';
-      toggle.setAttribute('aria-pressed', isFinal ? 'true' : 'false');
-      toggle.textContent = isFinal ? '★ Final' : 'Mark final';
-      toggle.addEventListener('click', () => onToggleFinal(combo));
-      slotCell.appendChild(toggle);
-
       tr.appendChild(slotCell);
 
-      for (let i = 0; i < combo.picks.length; i++) {
+      for (const d of dates) {
+        const combo = { date: d, slot: slot };
+        const n = cellCount(d, slot);
+        const isFinal = isInFinalSelections(combo);
         const td = document.createElement('td');
-        td.className = combo.picks[i] ? 'check' : 'no-check';
-        td.textContent = combo.picks[i] ? '✓' : '';
+        td.className = 'heat-cell';
+        if (isFinal) td.classList.add('is-best');
+
+        if (totalSubs > 0) {
+          const intensity = n / totalSubs;
+          const accentMix = Math.round(8 + intensity * 78);
+          td.style.backgroundColor =
+            'color-mix(in oklab, var(--accent) ' + accentMix + '%, var(--surface))';
+          if (intensity > 0.5) td.style.color = 'var(--on-accent)';
+          else td.style.color = 'var(--text)';
+        }
+
+        const wrap = document.createElement('div');
+        const num = document.createElement('span');
+        num.className = 'heat-num';
+        num.textContent = String(n);
+        const of = document.createElement('span');
+        of.className = 'heat-of';
+        of.textContent = 'of ' + totalSubs;
+        wrap.appendChild(num);
+        wrap.appendChild(of);
+        td.appendChild(wrap);
+
+        if (n === bestN && bestN > 0 && !isFinalized(ev) && !isFinal) {
+          const star = document.createElement('span');
+          star.className = 'heat-best-star';
+          star.textContent = '★';
+          td.appendChild(star);
+        }
+
+        const picks = sortedSubs.filter(sub =>
+          sub.availability && Array.isArray(sub.availability[d]) &&
+          sub.availability[d].indexOf(slot) !== -1
+        ).map(sub => sub.user_name);
+        td.title = (picks.length ? picks.join(', ') : 'No one picked this') +
+          (isFinal ? '  (final)' : '');
+
+        td.style.cursor = 'pointer';
+        td.addEventListener('click', () => onToggleFinal(combo));
+
         tr.appendChild(td);
       }
-
-      const totalCell = document.createElement('td');
-      totalCell.className = 'total';
-      totalCell.textContent = String(combo.total);
-      if (totalSubs > 0) {
-        const intensity = combo.total / totalSubs;
-        const alpha = (0.08 + intensity * 0.55).toFixed(3);
-        totalCell.style.backgroundColor = 'rgba(79, 70, 229, ' + alpha + ')';
-        if (intensity > 0.55) totalCell.style.color = '#fff';
-      }
-      tr.appendChild(totalCell);
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
     $('save-final').disabled = finalSelections.length === 0;
+  }
+
+  function renderConsensusBanner(ev, dates, slots, sortedSubs, cellCount, bestN) {
+    const wrap = $('matrix-wrap');
+    let banner = document.getElementById('consensus-banner');
+    if (banner) banner.remove();
+    if (isFinalized(ev) || bestN === 0 || sortedSubs.length === 0) return;
+
+    const leaders = [];
+    for (const d of dates) for (const s of slots) {
+      if (cellCount(d, s) === bestN) leaders.push({ date: d, slot: s });
+    }
+    if (leaders.length === 0) return;
+
+    banner = document.createElement('div');
+    banner.id = 'consensus-banner';
+    banner.className = 'consensus-banner';
+
+    const icon = document.createElement('span');
+    icon.className = 'consensus-icon';
+    icon.textContent = '★';
+    banner.appendChild(icon);
+
+    const body = document.createElement('div');
+    body.className = 'consensus-banner-body';
+
+    const label = document.createElement('div');
+    label.className = 'consensus-label';
+    label.textContent = leaders.length === 1 ? 'Top consensus' : 'Top consensus (tied)';
+    body.appendChild(label);
+
+    const title = document.createElement('div');
+    title.className = 'consensus-title';
+    if (leaders.length === 1) {
+      title.textContent = formatDateLong(leaders[0].date) + ' · ' + leaders[0].slot;
+    } else {
+      title.textContent = leaders.length + ' time slots tied at ' + bestN + '/' + sortedSubs.length;
+    }
+    body.appendChild(title);
+
+    const meta = document.createElement('div');
+    meta.className = 'consensus-meta';
+    const pct = Math.round((bestN / sortedSubs.length) * 100);
+    meta.textContent = bestN + ' of ' + sortedSubs.length + ' people available · ' + pct + '%';
+    body.appendChild(meta);
+
+    banner.appendChild(body);
+
+    if (leaders.length === 1) {
+      const cta = document.createElement('button');
+      cta.type = 'button';
+      cta.className = 'consensus-cta';
+      cta.textContent = 'Mark as final →';
+      cta.addEventListener('click', () => {
+        finalSelections = [{ date: leaders[0].date, slot: leaders[0].slot }];
+        buildMatrix(currentEvent, currentSubmissions);
+        $('save-final').disabled = false;
+      });
+      banner.appendChild(cta);
+    }
+
+    wrap.insertBefore(banner, wrap.firstChild);
   }
 
   function onToggleFinal(combo) {
