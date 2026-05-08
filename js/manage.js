@@ -10,6 +10,8 @@
   let editViewYear = 0;
   let editViewMonth = 0;
   let editOriginal = null;
+  let editPolls = [];
+  let editOriginalPolls = [];
 
   function $(id) { return document.getElementById(id); }
 
@@ -53,6 +55,162 @@
     return y + '-' +
       String(m + 1).padStart(2, '0') + '-' +
       String(d).padStart(2, '0');
+  }
+
+  // ---------- polls editor ----------
+
+  function uuid() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return 'p-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function addEditPoll() {
+    editPolls.push({ poll_id: uuid(), question: '', type: 'single', options: [] });
+    renderEditPolls();
+    refreshRemovalWarning();
+  }
+
+  function renderEditPolls() {
+    const container = $('edit-polls-editor');
+    if (!container) return;
+    container.innerHTML = '';
+    editPolls.forEach((poll, idx) => {
+      container.appendChild(buildEditPollCard(poll, idx));
+    });
+  }
+
+  function buildEditPollCard(poll, idx) {
+    const card = document.createElement('div');
+    card.className = 'poll-edit-card';
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'poll-edit-remove';
+    remove.setAttribute('aria-label', 'Remove poll');
+    remove.textContent = '×';
+    remove.addEventListener('click', () => {
+      editPolls.splice(idx, 1);
+      renderEditPolls();
+      refreshRemovalWarning();
+    });
+    card.appendChild(remove);
+
+    const qLabel = document.createElement('label');
+    const qSpan = document.createElement('span');
+    qSpan.className = 'label-text';
+    qSpan.textContent = 'Question';
+    qLabel.appendChild(qSpan);
+    const qInput = document.createElement('input');
+    qInput.type = 'text';
+    qInput.placeholder = 'e.g. What food should we get?';
+    qInput.value = poll.question || '';
+    qInput.addEventListener('input', () => { poll.question = qInput.value; });
+    qLabel.appendChild(qInput);
+    card.appendChild(qLabel);
+
+    const typeWrap = document.createElement('div');
+    typeWrap.className = 'poll-type-toggle';
+    const typeLabel = document.createElement('span');
+    typeLabel.className = 'label-text';
+    typeLabel.textContent = 'Type';
+    typeWrap.appendChild(typeLabel);
+    const seg = document.createElement('div');
+    seg.className = 'poll-type-segmented';
+    [['single', 'Pick one'], ['multi', 'Pick multiple']].forEach(([v, label]) => {
+      const opt = document.createElement('label');
+      opt.className = 'poll-type-opt';
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'edit-poll-type-' + poll.poll_id;
+      radio.value = v;
+      radio.checked = poll.type === v;
+      radio.addEventListener('change', () => { if (radio.checked) poll.type = v; });
+      const txt = document.createElement('span');
+      txt.textContent = label;
+      opt.appendChild(radio);
+      opt.appendChild(txt);
+      seg.appendChild(opt);
+    });
+    typeWrap.appendChild(seg);
+    card.appendChild(typeWrap);
+
+    const optsWrap = document.createElement('div');
+    optsWrap.className = 'poll-opts-wrap';
+    const optsLabel = document.createElement('span');
+    optsLabel.className = 'label-text';
+    optsLabel.textContent = 'Options';
+    optsWrap.appendChild(optsLabel);
+
+    const inputRow = document.createElement('div');
+    inputRow.className = 'row slot-input-row';
+    const optInput = document.createElement('input');
+    optInput.type = 'text';
+    optInput.placeholder = 'e.g. Pizza';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.textContent = 'Add';
+    function addOption() {
+      const v = optInput.value.trim();
+      if (!v) return;
+      if (poll.options.indexOf(v) === -1) poll.options.push(v);
+      optInput.value = '';
+      optInput.focus();
+      renderOptionChips();
+      refreshRemovalWarning();
+    }
+    addBtn.addEventListener('click', addOption);
+    optInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addOption(); }
+    });
+    inputRow.appendChild(optInput);
+    inputRow.appendChild(addBtn);
+    optsWrap.appendChild(inputRow);
+
+    const chipsWrap = document.createElement('div');
+    chipsWrap.className = 'chips';
+    optsWrap.appendChild(chipsWrap);
+
+    function renderOptionChips() {
+      chipsWrap.innerHTML = '';
+      poll.options.forEach((o, oi) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        const lbl = document.createElement('span');
+        lbl.textContent = o;
+        chip.appendChild(lbl);
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.className = 'chip-x';
+        x.setAttribute('aria-label', 'Remove ' + o);
+        x.textContent = '×';
+        x.addEventListener('click', () => {
+          poll.options.splice(oi, 1);
+          renderOptionChips();
+          refreshRemovalWarning();
+        });
+        chip.appendChild(x);
+        chipsWrap.appendChild(chip);
+      });
+    }
+    renderOptionChips();
+
+    card.appendChild(optsWrap);
+    return card;
+  }
+
+  function validateEditPolls(list) {
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      const q = String(p.question || '').trim();
+      const isEmpty = !q && (!p.options || p.options.length === 0);
+      if (isEmpty) return 'Remove unfilled polls or add a question and at least 2 options.';
+      if (!q) return 'Each poll needs a question.';
+      if (p.type !== 'single' && p.type !== 'multi') return 'Each poll needs a type.';
+      if (!Array.isArray(p.options) || p.options.length < 2) return 'Each poll needs at least 2 options.';
+    }
+    return '';
   }
 
   // ---------- list ----------
@@ -323,9 +481,24 @@
     if (!hasRemoval) {
       for (const s of editOriginal.slots) if (editSlots.indexOf(s) === -1) { hasRemoval = true; break; }
     }
+    let pollRemoval = false;
+    if (editOriginalPolls && editOriginalPolls.length > 0) {
+      const currentById = {};
+      for (const cp of editPolls) currentById[cp.poll_id] = cp;
+      for (const op of editOriginalPolls) {
+        const cur = currentById[op.poll_id];
+        if (!cur) { pollRemoval = true; break; }
+        const curOpts = {};
+        for (const o of cur.options) curOpts[o] = true;
+        for (const o of op.options) {
+          if (!curOpts[o]) { pollRemoval = true; break; }
+        }
+        if (pollRemoval) break;
+      }
+    }
     const count = editOriginal.submission_count || 0;
-    if (hasRemoval && count > 0) {
-      el.textContent = 'Removing dates/slots will discard those entries from ' +
+    if ((hasRemoval || pollRemoval) && count > 0) {
+      el.textContent = 'Removing dates/slots/poll options will discard those entries from ' +
         count + ' existing submission' + (count === 1 ? '' : 's') + '.';
       el.classList.remove('hidden');
     } else {
@@ -341,6 +514,17 @@
     setBanner($('edit-status'), '', null);
     editSelectedDates = new Set(ev.dates || []);
     editSlots = (ev.time_slots || []).slice();
+    const evPolls = Array.isArray(ev.polls) ? ev.polls : [];
+    editPolls = evPolls.map(function (p) {
+      // ev.polls may be the aggregated form (options as objects) — normalize
+      const opts = Array.isArray(p.options)
+        ? p.options.map(function (o) { return typeof o === 'string' ? o : o.text; })
+        : [];
+      return { poll_id: p.poll_id, question: p.question, type: p.type, options: opts };
+    });
+    editOriginalPolls = editPolls.map(function (p) {
+      return { poll_id: p.poll_id, question: p.question, type: p.type, options: p.options.slice() };
+    });
     editOriginal = {
       dates: new Set(ev.dates || []),
       slots: new Set(ev.time_slots || []),
@@ -353,6 +537,7 @@
     buildEditCalendar();
     renderEditDateChips();
     renderEditSlotChips();
+    renderEditPolls();
     refreshRemovalWarning();
     $('edit-modal-backdrop').classList.remove('hidden');
     document.body.classList.add('modal-open');
@@ -375,8 +560,13 @@
     if (!title) return setBanner(status, 'Title is required.', 'error');
     if (dates.length === 0) return setBanner(status, 'Select at least one date.', 'error');
     if (editSlots.length === 0) return setBanner(status, 'Add at least one time slot.', 'error');
+    const pollErr = validateEditPolls(editPolls);
+    if (pollErr) return setBanner(status, pollErr, 'error');
     const payload = {
-      title: title, description: description, dates: dates, time_slots: editSlots.slice()
+      title: title, description: description, dates: dates, time_slots: editSlots.slice(),
+      polls: editPolls.map(function (p) {
+        return { poll_id: p.poll_id, question: p.question, type: p.type, options: p.options.slice() };
+      })
     };
     const submitBtn = e.target.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
@@ -388,8 +578,12 @@
         throw new Error((res && res.error) || 'Could not save changes');
       }
       const removed = res.removed_count || 0;
-      if (removed > 0) {
-        setBanner(status, 'Saved. Cleaned up ' + removed + ' submission' + (removed === 1 ? '' : 's') + '.', 'ok');
+      const removedVotes = res.removed_vote_count || 0;
+      if (removed > 0 || removedVotes > 0) {
+        const parts = [];
+        if (removed > 0) parts.push(removed + ' availability submission' + (removed === 1 ? '' : 's'));
+        if (removedVotes > 0) parts.push(removedVotes + ' vote' + (removedVotes === 1 ? '' : 's'));
+        setBanner(status, 'Saved. Cleaned up ' + parts.join(' and ') + '.', 'ok');
       } else {
         setBanner(status, 'Saved.', 'ok');
       }
@@ -420,6 +614,7 @@
     $('edit-slot-input').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); addEditSlot(); }
     });
+    $('edit-add-poll').addEventListener('click', addEditPoll);
   }
 
   function init() {

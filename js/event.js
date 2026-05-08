@@ -227,7 +227,17 @@
         const slots = (s.availability && Array.isArray(s.availability[d])) ? s.availability[d] : [];
         if (slots.length > 0) lines.push(formatDateLong(d) + ': ' + slots.join(', '));
       }
-      picks.textContent = lines.length > 0 ? lines.join(' · ') : 'No slots selected.';
+      const pollLines = [];
+      const polls = Array.isArray(ev.polls) ? ev.polls : [];
+      const subVotes = (s.poll_votes && typeof s.poll_votes === 'object') ? s.poll_votes : {};
+      for (const poll of polls) {
+        const sel = subVotes[poll.poll_id];
+        if (Array.isArray(sel) && sel.length > 0) {
+          pollLines.push(poll.question + ': ' + sel.join(', '));
+        }
+      }
+      const allLines = lines.concat(pollLines);
+      picks.textContent = allLines.length > 0 ? allLines.join(' · ') : 'No slots or votes selected.';
       details.appendChild(picks);
 
       item.appendChild(details);
@@ -330,6 +340,139 @@
       tbody.appendChild(row);
     }
     table.appendChild(tbody);
+  }
+
+  // ---------- polls (submit tab) ----------
+
+  function renderPollsForSubmit(ev) {
+    const section = $('polls-section');
+    section.innerHTML = '';
+    const polls = Array.isArray(ev.polls) ? ev.polls : [];
+    if (polls.length === 0) {
+      section.classList.add('hidden');
+      return;
+    }
+    section.classList.remove('hidden');
+    for (const poll of polls) {
+      section.appendChild(buildPollCard(poll, { interactive: true }));
+    }
+  }
+
+  function buildPollCard(poll, opts) {
+    const interactive = opts && opts.interactive;
+    const card = document.createElement('div');
+    card.className = 'poll-card';
+    card.dataset.pollId = poll.poll_id;
+    card.dataset.pollType = poll.type;
+
+    const q = document.createElement('div');
+    q.className = 'poll-question';
+    q.textContent = poll.question;
+    card.appendChild(q);
+
+    const meta = document.createElement('div');
+    meta.className = 'poll-meta';
+    const totalVoters = poll.total_voters || 0;
+    const pickWord = poll.type === 'single' ? 'one' : 'any';
+    meta.textContent = totalVoters + (totalVoters === 1 ? ' vote' : ' votes') + ' · pick ' + pickWord;
+    card.appendChild(meta);
+
+    const optsWrap = document.createElement('div');
+    optsWrap.className = 'poll-options';
+
+    let maxCount = 0;
+    for (const o of poll.options) {
+      const c = (typeof o === 'object') ? (o.count || 0) : 0;
+      if (c > maxCount) maxCount = c;
+    }
+
+    for (const o of poll.options) {
+      const text = typeof o === 'string' ? o : o.text;
+      const count = typeof o === 'object' ? (o.count || 0) : 0;
+      const pct = maxCount > 0 ? Math.round((count / maxCount) * 100) : 0;
+
+      const wrap = interactive ? document.createElement('label') : document.createElement('div');
+      wrap.className = 'poll-option';
+      wrap.dataset.optionText = text;
+
+      if (interactive) {
+        const input = document.createElement('input');
+        input.type = poll.type === 'single' ? 'radio' : 'checkbox';
+        input.name = 'poll-' + poll.poll_id;
+        input.value = text;
+        wrap.appendChild(input);
+      }
+
+      const fill = document.createElement('span');
+      fill.className = 'poll-option-fill';
+      fill.style.width = pct + '%';
+      wrap.appendChild(fill);
+
+      const txt = document.createElement('span');
+      txt.className = 'poll-option-text';
+      txt.textContent = text;
+      wrap.appendChild(txt);
+
+      const cnt = document.createElement('span');
+      cnt.className = 'poll-option-count';
+      cnt.textContent = String(count);
+      wrap.appendChild(cnt);
+
+      optsWrap.appendChild(wrap);
+    }
+
+    card.appendChild(optsWrap);
+    return card;
+  }
+
+  function collectPollVotes() {
+    const out = {};
+    const cards = $('polls-section').querySelectorAll('.poll-card');
+    for (const card of cards) {
+      const pollId = card.dataset.pollId;
+      const checked = card.querySelectorAll('input:checked');
+      const sel = [];
+      for (const c of checked) sel.push(c.value);
+      out[pollId] = sel;
+    }
+    return out;
+  }
+
+  function applyPollVotesToForm(votes) {
+    clearPollVotes();
+    if (!votes) return;
+    const cards = $('polls-section').querySelectorAll('.poll-card');
+    for (const card of cards) {
+      const pollId = card.dataset.pollId;
+      const sel = votes[pollId];
+      if (!Array.isArray(sel)) continue;
+      const inputs = card.querySelectorAll('input');
+      for (const input of inputs) {
+        if (sel.indexOf(input.value) !== -1) input.checked = true;
+      }
+    }
+  }
+
+  function clearPollVotes() {
+    const inputs = $('polls-section').querySelectorAll('input');
+    for (const i of inputs) i.checked = false;
+  }
+
+  function renderAdminPollResults(ev) {
+    const wrap = $('admin-poll-results');
+    const body = $('admin-poll-results-body');
+    if (!wrap || !body) return;
+    const polls = Array.isArray(ev.polls) ? ev.polls : [];
+    if (polls.length === 0) {
+      wrap.classList.add('hidden');
+      body.innerHTML = '';
+      return;
+    }
+    wrap.classList.remove('hidden');
+    body.innerHTML = '';
+    for (const poll of polls) {
+      body.appendChild(buildPollCard(poll, { interactive: false }));
+    }
   }
 
   function clearGridChecks() {
@@ -721,6 +864,7 @@
     $('editing-banner').classList.remove('hidden');
     $('submit-section').classList.remove('hidden');
     applyAvailabilityToGrid(sub.availability);
+    applyPollVotesToForm(sub.poll_votes || {});
     setStatus('', null);
     refreshFormMode();
     activateTab('submit');
@@ -806,6 +950,7 @@
     $('user-passcode').value = '';
     $('admin-passcode-set').value = '';
     clearGridChecks();
+    clearPollVotes();
     setStatus('', null);
     refreshFormMode();
     if (currentEvent) showSubmitOrClosed(currentEvent);
@@ -853,12 +998,26 @@
     const slotPairs = sortedDates(ev).flatMap(d =>
       (ev.time_slots || []).map(s => ({ date: d, slot: s }))
     );
-    const header = ['Name'].concat(slotPairs.map(s => s.date + ' ' + s.slot));
+    const polls = Array.isArray(ev.polls) ? ev.polls : [];
+    const pollPairs = [];
+    for (const poll of polls) {
+      for (const o of poll.options) {
+        const text = typeof o === 'string' ? o : o.text;
+        pollPairs.push({ poll_id: poll.poll_id, question: poll.question, option: text });
+      }
+    }
+    const header = ['Name']
+      .concat(slotPairs.map(s => s.date + ' ' + s.slot))
+      .concat(pollPairs.map(p => p.question + ' — ' + p.option));
     const rows = submissions.map(sub => {
       const row = [sub.user_name];
       for (const sp of slotPairs) {
         const dayPicks = (sub.availability && sub.availability[sp.date]) || [];
         row.push(dayPicks.indexOf(sp.slot) !== -1 ? 'Y' : '');
+      }
+      for (const pp of pollPairs) {
+        const votes = (sub.poll_votes && sub.poll_votes[pp.poll_id]) || [];
+        row.push(votes.indexOf(pp.option) !== -1 ? 'Y' : '');
       }
       return row;
     });
@@ -911,6 +1070,7 @@
         return;
       }
       const availability = collectAvailability(currentEvent);
+      const pollVotes = collectPollVotes();
       const button = $('submit-button');
       button.disabled = true;
       setStatus('Submitting…', null);
@@ -919,9 +1079,9 @@
         if (editingMode === 'admin') {
           const newCode = $('admin-passcode-set').value.trim();
           const passcodeArg = newCode === '' ? undefined : newCode;
-          res = await API.updateSubmission(adminPass, editingSubmissionId, name, availability, passcodeArg);
+          res = await API.updateSubmission(adminPass, editingSubmissionId, name, availability, passcodeArg, pollVotes);
         } else if (editingMode === 'self') {
-          res = await API.editSubmissionAsUser(currentEvent.event_id, editingSubmissionId, verifiedPasscode, name, availability);
+          res = await API.editSubmissionAsUser(currentEvent.event_id, editingSubmissionId, verifiedPasscode, name, availability, pollVotes);
         } else {
           const code = $('user-passcode').value.trim();
           if (!/^\d{4}$/.test(code)) {
@@ -929,7 +1089,7 @@
             button.disabled = false;
             return;
           }
-          res = await API.submitAvailability(currentEvent.event_id, name, availability, code);
+          res = await API.submitAvailability(currentEvent.event_id, name, availability, code, pollVotes);
         }
         if (!res || res.ok !== true) {
           throw new Error((res && res.error) || 'Submission failed');
@@ -967,7 +1127,9 @@
       renderFinalBanner(ev);
       renderSubmitters(ev, currentSubmissions);
       renderAdminTools(ev);
+      renderAdminPollResults(ev);
       buildGrid(ev);
+      renderPollsForSubmit(ev);
       showSubmitOrClosed(ev);
       syncTabsForAdmin();
       // Pick initial tab from hash, or fall back to default for the event state
@@ -976,7 +1138,10 @@
 
       if (editingSubmissionId) {
         const match = currentSubmissions.find(s => s.submission_id === editingSubmissionId);
-        if (match) applyAvailabilityToGrid(match.availability);
+        if (match) {
+          applyAvailabilityToGrid(match.availability);
+          applyPollVotesToForm(match.poll_votes || {});
+        }
         else cancelEdit();
       }
       refreshFormMode();

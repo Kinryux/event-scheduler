@@ -19,7 +19,8 @@ const EVENTS_HEADERS = [
   'time_slots',
   'locked',
   'created_at',
-  'final_slots'
+  'final_slots',
+  'polls'
 ];
 
 const SUBMISSIONS_HEADERS = [
@@ -28,7 +29,8 @@ const SUBMISSIONS_HEADERS = [
   'user_name',
   'availability',
   'submitted_at',
-  'passcode'
+  'passcode',
+  'poll_votes'
 ];
 
 function ensureSheets_() {
@@ -134,6 +136,116 @@ function normalizeDate_(val) {
   return s;
 }
 
+function parsePolls_(value) {
+  if (value == null || value === '') return [];
+  if (Array.isArray(value)) return value;
+  try { const p = JSON.parse(value); return Array.isArray(p) ? p : []; }
+  catch (e) { return []; }
+}
+
+function parsePollVotes_(value) {
+  if (value == null || value === '') return {};
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  try { const p = JSON.parse(value); return p && typeof p === 'object' && !Array.isArray(p) ? p : {}; }
+  catch (e) { return {}; }
+}
+
+function validatePolls_(polls) {
+  if (!Array.isArray(polls)) throw new Error('polls must be an array');
+  const out = [];
+  const seenIds = {};
+  for (let i = 0; i < polls.length; i++) {
+    const p = polls[i];
+    if (!p || typeof p !== 'object') throw new Error('Invalid poll entry');
+    const question = String(p.question == null ? '' : p.question).trim();
+    if (!question) throw new Error('Poll question is required');
+    const type = p.type;
+    if (type !== 'single' && type !== 'multi') throw new Error('Poll type must be "single" or "multi"');
+    if (!Array.isArray(p.options)) throw new Error('Poll options must be an array');
+    const seen = {};
+    const opts = [];
+    for (let j = 0; j < p.options.length; j++) {
+      const o = String(p.options[j] == null ? '' : p.options[j]).trim();
+      if (!o) throw new Error('Poll options must be non-empty strings');
+      if (seen[o]) throw new Error('Poll options must be unique');
+      seen[o] = true;
+      opts.push(o);
+    }
+    if (opts.length < 1) throw new Error('Poll must have at least one option');
+    let pollId = String(p.poll_id || '').trim();
+    if (!pollId || seenIds[pollId]) pollId = Utilities.getUuid();
+    seenIds[pollId] = true;
+    out.push({ poll_id: pollId, question: question, type: type, options: opts });
+  }
+  return out;
+}
+
+function aggregatePolls_(polls, submissions) {
+  if (!Array.isArray(polls) || polls.length === 0) return [];
+  return polls.map(function (poll) {
+    const counts = {};
+    for (let i = 0; i < poll.options.length; i++) counts[poll.options[i]] = 0;
+    let voters = 0;
+    for (let i = 0; i < submissions.length; i++) {
+      const v = submissions[i].poll_votes || {};
+      const sel = v[poll.poll_id];
+      if (Array.isArray(sel) && sel.length > 0) {
+        let counted = false;
+        for (let j = 0; j < sel.length; j++) {
+          if (Object.prototype.hasOwnProperty.call(counts, sel[j])) {
+            counts[sel[j]]++;
+            counted = true;
+          }
+        }
+        if (counted) voters++;
+      }
+    }
+    const optsOut = poll.options.map(function (o) { return { text: o, count: counts[o] || 0 }; });
+    return {
+      poll_id: poll.poll_id,
+      question: poll.question,
+      type: poll.type,
+      options: optsOut,
+      total_voters: voters
+    };
+  });
+}
+
+function validatePollVotes_(pollVotes, polls) {
+  if (pollVotes == null) return {};
+  if (typeof pollVotes !== 'object' || Array.isArray(pollVotes)) {
+    throw new Error('poll_votes must be an object');
+  }
+  const pollMap = {};
+  if (Array.isArray(polls)) {
+    for (let i = 0; i < polls.length; i++) pollMap[polls[i].poll_id] = polls[i];
+  }
+  const out = {};
+  for (const pollId in pollVotes) {
+    if (!Object.prototype.hasOwnProperty.call(pollVotes, pollId)) continue;
+    const poll = pollMap[pollId];
+    if (!poll) continue; // silently drop unknown poll
+    const sel = pollVotes[pollId];
+    if (!Array.isArray(sel)) throw new Error('poll_votes value must be an array');
+    const optSet = {};
+    for (let i = 0; i < poll.options.length; i++) optSet[poll.options[i]] = true;
+    const filtered = [];
+    const seen = {};
+    for (let i = 0; i < sel.length; i++) {
+      const v = String(sel[i]);
+      if (!optSet[v]) throw new Error('Invalid option for poll');
+      if (seen[v]) continue;
+      seen[v] = true;
+      filtered.push(v);
+    }
+    if (poll.type === 'single' && filtered.length > 1) {
+      throw new Error('Single-select poll cannot have multiple selections');
+    }
+    if (filtered.length > 0) out[pollId] = filtered;
+  }
+  return out;
+}
+
 function parseFinalSlots_(value) {
   if (value == null || value === '') return [];
   if (Array.isArray(value)) return value;
@@ -178,7 +290,8 @@ function getEventsData_() {
     time_slots: typeof row[4] === 'string' ? JSON.parse(row[4]) : row[4],
     locked: parseLocked_(row[5]),
     created_at: row[6],
-    final_slots: parseFinalSlots_(row[7])
+    final_slots: parseFinalSlots_(row[7]),
+    polls: parsePolls_(row[8])
   }));
   return { sheet: sheet, rows: rows };
 }
@@ -201,6 +314,7 @@ function getSubmissionsForEvent_(eventId) {
   if (lastRow < 2) return [];
   const values = sheet.getRange(2, 1, lastRow - 1, SUBMISSIONS_HEADERS.length).getValues();
   const passcodeIdx = SUBMISSIONS_HEADERS.indexOf('passcode');
+  const pollVotesIdx = SUBMISSIONS_HEADERS.indexOf('poll_votes');
   const out = [];
   for (let i = 0; i < values.length; i++) {
     const row = values[i];
@@ -212,7 +326,8 @@ function getSubmissionsForEvent_(eventId) {
         user_name: row[2],
         availability: parseAvailability_(row[3]),
         submitted_at: row[4],
-        passcode: passcodeIdx >= 0 ? String(row[passcodeIdx] || '') : ''
+        passcode: passcodeIdx >= 0 ? String(row[passcodeIdx] || '') : '',
+        poll_votes: pollVotesIdx >= 0 ? parsePollVotes_(row[pollVotesIdx]) : {}
       });
     }
   }
@@ -244,6 +359,7 @@ function serializeEvent_(ev, submissionCount) {
     locked: ev.locked,
     created_at: ev.created_at,
     final_slots: ev.final_slots || [],
+    polls: ev.polls || [],
     submission_count: submissionCount || 0
   };
 }
@@ -338,17 +454,20 @@ function handleGetEvent_(eventId) {
   if (!found.event) {
     return { ok: false, error: 'Event not found' };
   }
-  const submissions = getSubmissionsForEvent_(eventId).map(function (s) {
+  const rawSubs = getSubmissionsForEvent_(eventId);
+  const submissions = rawSubs.map(function (s) {
     return {
       submission_id: s.submission_id,
       event_id: s.event_id,
       user_name: s.user_name,
       availability: s.availability,
       submitted_at: s.submitted_at,
-      has_passcode: !!s.passcode
+      has_passcode: !!s.passcode,
+      poll_votes: s.poll_votes || {}
     };
   });
   const serialized = serializeEvent_(found.event, submissions.length);
+  serialized.polls = aggregatePolls_(found.event.polls || [], rawSubs);
   serialized.submissions = submissions;
   return serialized;
 }
@@ -370,6 +489,7 @@ function handleCreateEvent_(body) {
     }
   }
   const uniqueDates = Array.from(new Set(dates)).sort();
+  const polls = validatePolls_(body.polls == null ? [] : body.polls);
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName(EVENTS_SHEET);
   const eventId = Utilities.getUuid();
@@ -382,7 +502,8 @@ function handleCreateEvent_(body) {
     JSON.stringify(timeSlots),
     'FALSE',
     createdAt,
-    '[]'
+    '[]',
+    JSON.stringify(polls)
   ]);
   return { ok: true, event_id: eventId };
 }
@@ -402,6 +523,13 @@ function handleSubmitAvailability_(body) {
   }
   if (found.event.locked) return { ok: false, error: 'Event is locked' };
   if (isExpired_(found.event.dates)) return { ok: false, error: 'Event has expired' };
+
+  let pollVotes;
+  try {
+    pollVotes = validatePollVotes_(body.poll_votes == null ? {} : body.poll_votes, found.event.polls || []);
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -424,7 +552,8 @@ function handleSubmitAvailability_(body) {
       String(userName).trim(),
       JSON.stringify(availability),
       new Date().toISOString(),
-      passcode
+      passcode,
+      JSON.stringify(pollVotes)
     ]);
   } finally {
     lock.releaseLock();
@@ -455,10 +584,18 @@ function handleUpdateEvent_(body) {
   for (let i = 0; i < uniqueDates.length; i++) dateSet[uniqueDates[i]] = true;
   const slotSet = {};
   for (let i = 0; i < timeSlots.length; i++) slotSet[timeSlots[i]] = true;
+  const polls = validatePolls_(body.polls == null ? [] : body.polls);
+  const pollMap = {};
+  for (let i = 0; i < polls.length; i++) {
+    const optSet = {};
+    for (let j = 0; j < polls[i].options.length; j++) optSet[polls[i].options[j]] = true;
+    pollMap[polls[i].poll_id] = { type: polls[i].type, options: optSet };
+  }
 
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   let removedCount = 0;
+  let removedVoteCount = 0;
   try {
     const found = findEventById_(eventId);
     if (!found.event) throw new Error('Event not found');
@@ -467,10 +604,14 @@ function handleUpdateEvent_(body) {
     const descCol = EVENTS_HEADERS.indexOf('description') + 1;
     const datesCol = EVENTS_HEADERS.indexOf('dates') + 1;
     const slotsCol = EVENTS_HEADERS.indexOf('time_slots') + 1;
+    const pollsCol = EVENTS_HEADERS.indexOf('polls') + 1;
     sheet.getRange(found.event.rowIndex, titleCol).setValue(title);
     sheet.getRange(found.event.rowIndex, descCol).setValue(description);
     sheet.getRange(found.event.rowIndex, datesCol).setValue(JSON.stringify(uniqueDates));
     sheet.getRange(found.event.rowIndex, slotsCol).setValue(JSON.stringify(timeSlots));
+    if (pollsCol > 0) {
+      sheet.getRange(found.event.rowIndex, pollsCol).setValue(JSON.stringify(polls));
+    }
 
     const ss = SpreadsheetApp.openById(SHEET_ID);
     const subs = ss.getSheetByName(SUBMISSIONS_SHEET);
@@ -479,6 +620,8 @@ function handleUpdateEvent_(body) {
       if (lastRow >= 2) {
         const values = subs.getRange(2, 1, lastRow - 1, SUBMISSIONS_HEADERS.length).getValues();
         const availCol = SUBMISSIONS_HEADERS.indexOf('availability') + 1;
+        const votesColIdx = SUBMISSIONS_HEADERS.indexOf('poll_votes');
+        const votesCol = votesColIdx + 1;
         for (let i = 0; i < values.length; i++) {
           if (String(values[i][1]) !== eventId) continue;
           const orig = parseAvailability_(values[i][3]);
@@ -498,13 +641,36 @@ function handleUpdateEvent_(body) {
             removedCount++;
             subs.getRange(i + 2, availCol).setValue(JSON.stringify(cleaned));
           }
+
+          if (votesColIdx >= 0) {
+            const origVotes = parsePollVotes_(values[i][votesColIdx]);
+            const cleanedVotes = {};
+            let votesModified = false;
+            for (const pollId in origVotes) {
+              if (!pollMap[pollId]) { votesModified = true; continue; }
+              const sel = Array.isArray(origVotes[pollId]) ? origVotes[pollId] : [];
+              let kept = [];
+              for (let j = 0; j < sel.length; j++) {
+                if (pollMap[pollId].options[sel[j]]) kept.push(sel[j]);
+              }
+              if (pollMap[pollId].type === 'single' && kept.length > 1) {
+                kept = [kept[0]];
+              }
+              if (kept.length !== sel.length) votesModified = true;
+              if (kept.length > 0) cleanedVotes[pollId] = kept;
+            }
+            if (votesModified) {
+              removedVoteCount++;
+              subs.getRange(i + 2, votesCol).setValue(JSON.stringify(cleanedVotes));
+            }
+          }
         }
       }
     }
   } finally {
     lock.releaseLock();
   }
-  return { ok: true, removed_count: removedCount };
+  return { ok: true, removed_count: removedCount, removed_vote_count: removedVoteCount };
 }
 
 function handleLockEvent_(body) {
@@ -526,6 +692,7 @@ function handleUpdateSubmission_(body) {
   const availability = body.availability;
   const passcodeProvided = Object.prototype.hasOwnProperty.call(body, 'passcode');
   const newPasscode = passcodeProvided ? String(body.passcode == null ? '' : body.passcode) : null;
+  const pollVotesProvided = Object.prototype.hasOwnProperty.call(body, 'poll_votes');
 
   if (!submissionId) throw new Error('Missing submission_id');
   if (availability == null || typeof availability !== 'object') {
@@ -541,15 +708,28 @@ function handleUpdateSubmission_(body) {
     if (lastRow < 2) throw new Error('Submission not found');
     const values = sheet.getRange(2, 1, lastRow - 1, SUBMISSIONS_HEADERS.length).getValues();
     let rowIndex = -1;
+    let eventId = '';
     for (let i = 0; i < values.length; i++) {
-      if (String(values[i][0]) === submissionId) { rowIndex = i + 2; break; }
+      if (String(values[i][0]) === submissionId) {
+        rowIndex = i + 2;
+        eventId = String(values[i][1]);
+        break;
+      }
     }
     if (rowIndex < 0) throw new Error('Submission not found');
+
+    let pollVotes = null;
+    if (pollVotesProvided) {
+      const found = findEventById_(eventId);
+      pollVotes = validatePollVotes_(body.poll_votes == null ? {} : body.poll_votes,
+        (found.event && found.event.polls) || []);
+    }
 
     const nameCol = SUBMISSIONS_HEADERS.indexOf('user_name') + 1;
     const availCol = SUBMISSIONS_HEADERS.indexOf('availability') + 1;
     const submittedCol = SUBMISSIONS_HEADERS.indexOf('submitted_at') + 1;
     const passcodeCol = SUBMISSIONS_HEADERS.indexOf('passcode') + 1;
+    const votesCol = SUBMISSIONS_HEADERS.indexOf('poll_votes') + 1;
 
     if (userName != null && String(userName).trim() !== '') {
       sheet.getRange(rowIndex, nameCol).setValue(String(userName).trim());
@@ -558,6 +738,9 @@ function handleUpdateSubmission_(body) {
     sheet.getRange(rowIndex, submittedCol).setValue(new Date().toISOString());
     if (passcodeProvided && passcodeCol > 0) {
       sheet.getRange(rowIndex, passcodeCol).setValue(newPasscode);
+    }
+    if (pollVotesProvided && votesCol > 0) {
+      sheet.getRange(rowIndex, votesCol).setValue(JSON.stringify(pollVotes || {}));
     }
   } finally {
     lock.releaseLock();
@@ -642,9 +825,11 @@ function handleEditSubmissionAsUser_(body) {
   const passcode = body.passcode == null ? '' : String(body.passcode);
   const userName = body.user_name;
   const availability = body.availability;
+  const pollVotesProvided = Object.prototype.hasOwnProperty.call(body, 'poll_votes');
   if (!submissionId || !userName || availability == null || typeof availability !== 'object') {
     return { ok: false, error: 'Missing required fields' };
   }
+  let eventPolls = [];
   if (eventId) {
     const found = findEventById_(eventId);
     if (!found.event) return { ok: false, error: 'Event not found' };
@@ -653,6 +838,15 @@ function handleEditSubmissionAsUser_(body) {
     }
     if (found.event.locked) return { ok: false, error: 'Event is locked' };
     if (isExpired_(found.event.dates)) return { ok: false, error: 'Event has expired' };
+    eventPolls = found.event.polls || [];
+  }
+  let pollVotes = null;
+  if (pollVotesProvided) {
+    try {
+      pollVotes = validatePollVotes_(body.poll_votes == null ? {} : body.poll_votes, eventPolls);
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   }
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -679,9 +873,13 @@ function handleEditSubmissionAsUser_(body) {
     const nameCol = SUBMISSIONS_HEADERS.indexOf('user_name') + 1;
     const availCol = SUBMISSIONS_HEADERS.indexOf('availability') + 1;
     const submittedCol = SUBMISSIONS_HEADERS.indexOf('submitted_at') + 1;
+    const votesCol = SUBMISSIONS_HEADERS.indexOf('poll_votes') + 1;
     sheet.getRange(rowIndex, nameCol).setValue(String(userName).trim());
     sheet.getRange(rowIndex, availCol).setValue(JSON.stringify(availability));
     sheet.getRange(rowIndex, submittedCol).setValue(new Date().toISOString());
+    if (pollVotesProvided && votesCol > 0) {
+      sheet.getRange(rowIndex, votesCol).setValue(JSON.stringify(pollVotes || {}));
+    }
   } finally {
     lock.releaseLock();
   }
