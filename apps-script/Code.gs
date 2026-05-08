@@ -477,10 +477,12 @@ function handleCreateEvent_(body) {
   const title = body.title;
   const description = body.description == null ? '' : body.description;
   const dates = body.dates;
-  const timeSlots = body.time_slots;
-  if (!title || !Array.isArray(dates) || dates.length === 0 ||
-      !Array.isArray(timeSlots) || timeSlots.length === 0) {
-    throw new Error('Missing required fields');
+  const timeSlots = Array.isArray(body.time_slots) ? body.time_slots : [];
+  const polls = validatePolls_(body.polls == null ? [] : body.polls);
+  const hasSlots = timeSlots.length > 0;
+  const hasPolls = polls.length > 0;
+  if (!title || !Array.isArray(dates) || dates.length === 0 || (!hasSlots && !hasPolls)) {
+    throw new Error('Event needs a title, dates, and either time slots or at least one poll.');
   }
   const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
   for (let i = 0; i < dates.length; i++) {
@@ -489,7 +491,6 @@ function handleCreateEvent_(body) {
     }
   }
   const uniqueDates = Array.from(new Set(dates)).sort();
-  const polls = validatePolls_(body.polls == null ? [] : body.polls);
   const ss = SpreadsheetApp.openById(SHEET_ID);
   const sheet = ss.getSheetByName(EVENTS_SHEET);
   const eventId = Utilities.getUuid();
@@ -567,11 +568,14 @@ function handleUpdateEvent_(body) {
   const title = body.title;
   const description = body.description == null ? '' : body.description;
   const dates = body.dates;
-  const timeSlots = body.time_slots;
+  const timeSlots = Array.isArray(body.time_slots) ? body.time_slots : [];
+  const polls = validatePolls_(body.polls == null ? [] : body.polls);
+  const hasSlots = timeSlots.length > 0;
+  const hasPolls = polls.length > 0;
   if (!eventId || !title ||
       !Array.isArray(dates) || dates.length === 0 ||
-      !Array.isArray(timeSlots) || timeSlots.length === 0) {
-    throw new Error('Missing required fields');
+      (!hasSlots && !hasPolls)) {
+    throw new Error('Event needs a title, dates, and either time slots or at least one poll.');
   }
   const ISO_RE = /^\d{4}-\d{2}-\d{2}$/;
   for (let i = 0; i < dates.length; i++) {
@@ -584,7 +588,6 @@ function handleUpdateEvent_(body) {
   for (let i = 0; i < uniqueDates.length; i++) dateSet[uniqueDates[i]] = true;
   const slotSet = {};
   for (let i = 0; i < timeSlots.length; i++) slotSet[timeSlots[i]] = true;
-  const polls = validatePolls_(body.polls == null ? [] : body.polls);
   const pollMap = {};
   for (let i = 0; i < polls.length; i++) {
     const optSet = {};

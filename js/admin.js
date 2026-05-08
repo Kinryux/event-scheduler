@@ -355,9 +355,11 @@
 
     if (!title) return setBanner(status, 'Title is required.', 'error');
     if (dates.length === 0) return setBanner(status, 'Select at least one date.', 'error');
-    if (slots.length === 0) return setBanner(status, 'Add at least one time slot.', 'error');
     const pollErr = validatePolls(polls);
     if (pollErr) return setBanner(status, pollErr, 'error');
+    if (slots.length === 0 && polls.length === 0) {
+      return setBanner(status, 'Add at least one time slot or one poll before creating the event.', 'error');
+    }
 
     const payload = {
       title: title,
@@ -434,11 +436,11 @@
       if (!title) return 'Title is required.';
     } else if (n === 2) {
       if (selectedDates.size === 0) return 'Select at least one date.';
-    } else if (n === 3) {
-      if (slots.length === 0) return 'Add at least one time slot.';
     } else if (n === 4) {
       return validatePolls(polls);
     }
+    // Step 3 (times) and Step 4 (polls) are individually optional.
+    // Cross-step "at least one of times or polls" check happens on final submit.
     return '';
   }
 

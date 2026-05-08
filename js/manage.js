@@ -496,8 +496,12 @@
         if (pollRemoval) break;
       }
     }
+    const allSlotsRemoved = editOriginal.slots.size > 0 && editSlots.length === 0;
     const count = editOriginal.submission_count || 0;
-    if ((hasRemoval || pollRemoval) && count > 0) {
+    if (count > 0 && allSlotsRemoved) {
+      el.textContent = "Removing all time slots will discard everyone's availability picks.";
+      el.classList.remove('hidden');
+    } else if ((hasRemoval || pollRemoval) && count > 0) {
       el.textContent = 'Removing dates/slots/poll options will discard those entries from ' +
         count + ' existing submission' + (count === 1 ? '' : 's') + '.';
       el.classList.remove('hidden');
@@ -559,9 +563,11 @@
     const dates = Array.from(editSelectedDates).sort();
     if (!title) return setBanner(status, 'Title is required.', 'error');
     if (dates.length === 0) return setBanner(status, 'Select at least one date.', 'error');
-    if (editSlots.length === 0) return setBanner(status, 'Add at least one time slot.', 'error');
     const pollErr = validateEditPolls(editPolls);
     if (pollErr) return setBanner(status, pollErr, 'error');
+    if (editSlots.length === 0 && editPolls.length === 0) {
+      return setBanner(status, 'Add at least one time slot or one poll.', 'error');
+    }
     const payload = {
       title: title, description: description, dates: dates, time_slots: editSlots.slice(),
       polls: editPolls.map(function (p) {
