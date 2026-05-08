@@ -237,7 +237,13 @@
         }
       }
       const allLines = lines.concat(pollLines);
-      picks.textContent = allLines.length > 0 ? allLines.join(' · ') : 'No slots or votes selected.';
+      if (allLines.length > 0) {
+        picks.textContent = allLines.join(' · ');
+      } else if ((ev.time_slots || []).length === 0 && (Array.isArray(ev.polls) ? ev.polls.length : 0) > 0) {
+        picks.textContent = 'No votes yet.';
+      } else {
+        picks.textContent = 'No slots or votes selected.';
+      }
       details.appendChild(picks);
 
       item.appendChild(details);
@@ -250,6 +256,12 @@
     const table = $('availability-grid');
     table.innerHTML = '';
     const slots = ev.time_slots || [];
+    const wrap = table.closest('.scroll-x');
+    if (slots.length === 0) {
+      if (wrap) wrap.classList.add('hidden');
+      return;
+    }
+    if (wrap) wrap.classList.remove('hidden');
     const dates = sortedDates(ev);
     const totalSubs = currentSubmissions.length;
 
@@ -508,12 +520,17 @@
     const submitSection = $('submit-section');
     const closedSection = $('closed-notice');
 
+    const slotsCount = (ev.time_slots || []).length;
+    const pollsCount = Array.isArray(ev.polls) ? ev.polls.length : 0;
+    const nothingToSubmit = slotsCount === 0 && pollsCount === 0;
+
     let closedMsg = '';
     if (finalized) closedMsg = 'This event has been finalized.';
     else if (ev.locked) closedMsg = 'This event is locked — no new submissions accepted.';
     else if (isExpired(ev)) closedMsg = 'This event has expired.';
+    else if (nothingToSubmit) closedMsg = 'This event has nothing to submit yet.';
 
-    const isInert = finalized || closed;
+    const isInert = finalized || closed || nothingToSubmit;
     const showForm = !isInert || (isAdmin() && editingSubmissionId);
 
     submitSection.classList.toggle('hidden', !showForm);
@@ -594,19 +611,31 @@
     }
     tools.classList.remove('hidden');
 
+    const slots = (ev.time_slots || []);
+    const polls = Array.isArray(ev.polls) ? ev.polls : [];
     const wrap = $('matrix-wrap');
     const empty = $('matrix-empty');
-    if (currentSubmissions.length === 0) {
-      wrap.classList.add('hidden');
-      empty.classList.remove('hidden');
-    } else {
-      wrap.classList.remove('hidden');
-      empty.classList.add('hidden');
-      buildMatrix(ev, currentSubmissions);
-    }
+    const saveBtn = $('save-final');
+    const clearBtn = $('clear-final');
 
-    $('clear-final').classList.toggle('hidden', !isFinalized(ev));
-    $('save-final').disabled = finalSelections.length === 0;
+    if (slots.length === 0) {
+      wrap.classList.add('hidden');
+      empty.classList.toggle('hidden', polls.length > 0 || currentSubmissions.length > 0);
+      saveBtn.classList.add('hidden');
+      clearBtn.classList.add('hidden');
+    } else {
+      saveBtn.classList.remove('hidden');
+      if (currentSubmissions.length === 0) {
+        wrap.classList.add('hidden');
+        empty.classList.remove('hidden');
+      } else {
+        wrap.classList.remove('hidden');
+        empty.classList.add('hidden');
+        buildMatrix(ev, currentSubmissions);
+      }
+      clearBtn.classList.toggle('hidden', !isFinalized(ev));
+      saveBtn.disabled = finalSelections.length === 0;
+    }
   }
 
   function isInFinalSelections(combo) {

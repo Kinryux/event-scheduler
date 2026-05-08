@@ -76,7 +76,13 @@
 
     // Mini heatmap grid — intensity driven by submission_count
     const dates = ev.dates || [];
-    if (dates.length > 0) {
+    const slots = ev.time_slots || [];
+    if (slots.length === 0) {
+      const tag = document.createElement('span');
+      tag.className = 'badge';
+      tag.textContent = 'Poll only';
+      titleRow.appendChild(tag);
+    } else if (dates.length > 0) {
       const heatmap = document.createElement('div');
       heatmap.className = 'heatmap-mini';
       heatmap.style.gridTemplateColumns = 'repeat(' + dates.length + ', 1fr)';
