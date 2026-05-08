@@ -4,10 +4,11 @@
   let selectedDates = new Set();
   let viewYear = 0;
   let viewMonth = 0; // 0-11
+  let polls = [];
 
   // Wizard
   let wizardStep = 1;
-  const WIZARD_TOTAL = 3;
+  const WIZARD_TOTAL = 4;
 
   function $(id) { return document.getElementById(id); }
 
@@ -96,6 +97,152 @@
     input.value = '';
     input.focus();
     renderChips();
+  }
+
+  // ---------- polls editor ----------
+
+  function uuid() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+      return window.crypto.randomUUID();
+    }
+    return 'p-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function addPoll() {
+    polls.push({ poll_id: uuid(), question: '', type: 'single', options: [] });
+    renderPolls('polls-editor', polls);
+  }
+
+  function removePoll(idx) {
+    polls.splice(idx, 1);
+    renderPolls('polls-editor', polls);
+  }
+
+  function renderPolls(containerId, list) {
+    const container = $(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    list.forEach((poll, idx) => {
+      container.appendChild(buildPollCard(poll, idx, list, containerId));
+    });
+  }
+
+  function buildPollCard(poll, idx, list, containerId) {
+    const card = document.createElement('div');
+    card.className = 'poll-edit-card';
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'poll-edit-remove';
+    remove.setAttribute('aria-label', 'Remove poll');
+    remove.textContent = '×';
+    remove.addEventListener('click', () => {
+      list.splice(idx, 1);
+      renderPolls(containerId, list);
+    });
+    card.appendChild(remove);
+
+    const qLabel = document.createElement('label');
+    const qSpan = document.createElement('span');
+    qSpan.className = 'label-text';
+    qSpan.textContent = 'Question';
+    qLabel.appendChild(qSpan);
+    const qInput = document.createElement('input');
+    qInput.type = 'text';
+    qInput.placeholder = 'e.g. What food should we get?';
+    qInput.value = poll.question || '';
+    qInput.addEventListener('input', () => { poll.question = qInput.value; });
+    qLabel.appendChild(qInput);
+    card.appendChild(qLabel);
+
+    const typeWrap = document.createElement('div');
+    typeWrap.className = 'poll-type-toggle';
+    const typeLabel = document.createElement('span');
+    typeLabel.className = 'label-text';
+    typeLabel.textContent = 'Type';
+    typeWrap.appendChild(typeLabel);
+    const seg = document.createElement('div');
+    seg.className = 'poll-type-segmented';
+    [['single', 'Pick one'], ['multi', 'Pick multiple']].forEach(([v, label]) => {
+      const opt = document.createElement('label');
+      opt.className = 'poll-type-opt';
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = 'poll-type-' + poll.poll_id;
+      radio.value = v;
+      radio.checked = poll.type === v;
+      radio.addEventListener('change', () => {
+        if (radio.checked) poll.type = v;
+      });
+      const txt = document.createElement('span');
+      txt.textContent = label;
+      opt.appendChild(radio);
+      opt.appendChild(txt);
+      seg.appendChild(opt);
+    });
+    typeWrap.appendChild(seg);
+    card.appendChild(typeWrap);
+
+    const optsWrap = document.createElement('div');
+    optsWrap.className = 'poll-opts-wrap';
+    const optsLabel = document.createElement('span');
+    optsLabel.className = 'label-text';
+    optsLabel.textContent = 'Options';
+    optsWrap.appendChild(optsLabel);
+
+    const inputRow = document.createElement('div');
+    inputRow.className = 'row slot-input-row';
+    const optInput = document.createElement('input');
+    optInput.type = 'text';
+    optInput.placeholder = 'e.g. Pizza';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.textContent = 'Add';
+    function addOption() {
+      const v = optInput.value.trim();
+      if (!v) return;
+      if (poll.options.indexOf(v) === -1) poll.options.push(v);
+      optInput.value = '';
+      optInput.focus();
+      renderOptionChips();
+    }
+    addBtn.addEventListener('click', addOption);
+    optInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); addOption(); }
+    });
+    inputRow.appendChild(optInput);
+    inputRow.appendChild(addBtn);
+    optsWrap.appendChild(inputRow);
+
+    const chipsWrap = document.createElement('div');
+    chipsWrap.className = 'chips';
+    optsWrap.appendChild(chipsWrap);
+
+    function renderOptionChips() {
+      chipsWrap.innerHTML = '';
+      poll.options.forEach((o, oi) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        const lbl = document.createElement('span');
+        lbl.textContent = o;
+        chip.appendChild(lbl);
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.className = 'chip-x';
+        x.setAttribute('aria-label', 'Remove ' + o);
+        x.textContent = '×';
+        x.addEventListener('click', () => {
+          poll.options.splice(oi, 1);
+          renderOptionChips();
+        });
+        chip.appendChild(x);
+        chipsWrap.appendChild(chip);
+      });
+    }
+    renderOptionChips();
+
+    card.appendChild(optsWrap);
+    return card;
   }
 
   // ---------- calendar ----------
@@ -209,12 +356,17 @@
     if (!title) return setBanner(status, 'Title is required.', 'error');
     if (dates.length === 0) return setBanner(status, 'Select at least one date.', 'error');
     if (slots.length === 0) return setBanner(status, 'Add at least one time slot.', 'error');
+    const pollErr = validatePolls(polls);
+    if (pollErr) return setBanner(status, pollErr, 'error');
 
     const payload = {
       title: title,
       description: description,
       dates: dates,
-      time_slots: slots.slice()
+      time_slots: slots.slice(),
+      polls: polls.map(function (p) {
+        return { poll_id: p.poll_id, question: p.question, type: p.type, options: p.options.slice() };
+      })
     };
 
     const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -233,8 +385,10 @@
       $('create-form').reset();
       slots = [];
       selectedDates = new Set();
+      polls = [];
       renderChips();
       renderDateChips();
+      renderPolls('polls-editor', polls);
       buildCalendar();
       resetWizard();
       setBannerWithLink(status, 'Event created. ', 'View in Manage →', 'manage.html', 'ok');
@@ -282,6 +436,25 @@
       if (selectedDates.size === 0) return 'Select at least one date.';
     } else if (n === 3) {
       if (slots.length === 0) return 'Add at least one time slot.';
+    } else if (n === 4) {
+      return validatePolls(polls);
+    }
+    return '';
+  }
+
+  function validatePolls(list) {
+    for (let i = 0; i < list.length; i++) {
+      const p = list[i];
+      const q = String(p.question || '').trim();
+      const isEmpty = !q && (!p.options || p.options.length === 0);
+      if (isEmpty) {
+        return 'Remove unfilled polls or add a question and at least 2 options.';
+      }
+      if (!q) return 'Each poll needs a question.';
+      if (p.type !== 'single' && p.type !== 'multi') return 'Each poll needs a type.';
+      if (!Array.isArray(p.options) || p.options.length < 2) {
+        return 'Each poll needs at least 2 options.';
+      }
     }
     return '';
   }
@@ -370,9 +543,11 @@
 
     $('cal-prev').addEventListener('click', () => gotoMonth(-1));
     $('cal-next').addEventListener('click', () => gotoMonth(1));
+    $('add-poll').addEventListener('click', addPoll);
     initCalendarView();
     buildCalendar();
     renderDateChips();
+    renderPolls('polls-editor', polls);
 
     wireWizard();
     showSignedOutBanner();

@@ -28,12 +28,13 @@
     createEvent: function (adminPass, payload) {
       return post('createEvent', Object.assign({ adminPass: adminPass }, payload || {}));
     },
-    submitAvailability: function (eventId, userName, availability, passcode) {
+    submitAvailability: function (eventId, userName, availability, passcode, pollVotes) {
       return post('submitAvailability', {
         event_id: eventId,
         user_name: userName,
         availability: availability,
-        passcode: passcode == null ? '' : passcode
+        passcode: passcode == null ? '' : passcode,
+        poll_votes: pollVotes == null ? {} : pollVotes
       });
     },
     lockEvent: function (adminPass, eventId, locked) {
@@ -55,7 +56,7 @@
         event_id: eventId
       }, payload || {}));
     },
-    updateSubmission: function (adminPass, submissionId, userName, availability, passcode) {
+    updateSubmission: function (adminPass, submissionId, userName, availability, passcode, pollVotes) {
       const body = {
         adminPass: adminPass,
         submission_id: submissionId,
@@ -63,16 +64,19 @@
         availability: availability
       };
       if (passcode !== undefined) body.passcode = passcode;
+      if (pollVotes !== undefined) body.poll_votes = pollVotes;
       return post('updateSubmission', body);
     },
-    editSubmissionAsUser: function (eventId, submissionId, passcode, userName, availability) {
-      return post('editSubmissionAsUser', {
+    editSubmissionAsUser: function (eventId, submissionId, passcode, userName, availability, pollVotes) {
+      const body = {
         event_id: eventId,
         submission_id: submissionId,
         passcode: passcode == null ? '' : passcode,
         user_name: userName,
         availability: availability
-      });
+      };
+      if (pollVotes !== undefined) body.poll_votes = pollVotes;
+      return post('editSubmissionAsUser', body);
     },
     verifyPasscode: function (submissionId, passcode) {
       return post('verifyPasscode', {
